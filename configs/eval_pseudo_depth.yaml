@@ -1,0 +1,22 @@
+defaults:
+  - default
+  - data: kitti_360
+  - _self_
+
+name: "eval_pseudo_depth"
+eval_type: "eval_pseudo_depth"
+checkpoint: "checkpoints/BTS-KITTI-360.pt"
+
+log_every: 100
+batch_size: 1
+
+data:
+  image_size: [ 192, 640 ]
+  data_fc: 2
+  is_preprocessed: true
+  return_pseudo_depth: true
+  return_gt_depth: true
+
+
+model_conf:
+  depth_scaling: "median"
