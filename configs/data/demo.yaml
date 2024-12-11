@@ -1,0 +1,15 @@
+type: "KITTI_360"
+data_path: "/home/fengyi/datasets/KITTI-360"
+pose_path: "/home/fengyi/datasets/KITTI-360/data_poses"
+split_path: "datasets/kitti_360/splits/demo.txt"
+image_size: [ 192, 640 ]
+
+return_stereo: false
+return_fisheye: false
+return_gt_depth: true
+return_pseudo_depth: true
+
+data_fc: 1
+fisheye_rotation: -15
+fisheye_offset: 10
+is_preprocessed: true

@@ -163,7 +163,7 @@ cython_debug/
 
 
 visualization/
-data/
+./data/
 KITTI-360/
 checkpoints/
 out/
