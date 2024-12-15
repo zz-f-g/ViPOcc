@@ -1,6 +1,6 @@
 type: "KITTI_360"
-data_path: "/home/fengyi/datasets/KITTI-360"
-pose_path: "/home/fengyi/datasets/KITTI-360/data_poses"
+data_path: "data/KITTI-360"
+pose_path: "data/KITTI-360/data_poses"
 split_path: "datasets/kitti_360/splits/demo.txt"
 image_size: [ 192, 640 ]
 

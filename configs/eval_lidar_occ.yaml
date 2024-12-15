@@ -23,8 +23,8 @@ data:
   return_stereo: false
   data_fc: 1
   is_preprocessed: false
-  data_path: "/media/fengyi/disk/datasets/KITTI-360"
-  pose_path: "/media/fengyi/disk/datasets/KITTI-360/data_poses"
+  data_path: "data/KITTI-360"
+  pose_path: "data/KITTI-360/data_poses"
 
 model_conf:
   arch: "BTSNet"
@@ -65,10 +65,10 @@ model_conf:
   save_pred_gt_img: False
   save_dir: ${checkpoint}
 
-  read_gt_occ_path: "./KITTI-360/GT_Occ"
+  read_gt_occ_path: "data/KITTI-360/GT_Occ"
   # object-level evaluation settings
   is_eval_object: true
-  read_gt_obj_path: "./KITTI-360/Object_Label"
+  read_gt_obj_path: "data/KITTI-360/Object_Label"
   obj_z_expand: 2
   obj_x_expand: 0.5
 
