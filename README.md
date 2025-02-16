@@ -1,4 +1,4 @@
-# ViPOcc: Leveraging Visual Priors from Vision Foundation Models for Single-View 3D Occupancy Prediction (AAAI-25)
+# ViPOcc: Leveraging Visual Priors from Vision Foundation Models for Single-View 3D Occupancy Prediction (AAAI-25 Oral)
 
 ### [**Paper**](https://arxiv.org/abs/2412.11210) | [**Video**](https://www.bilibili.com/video/BV1ynqZYNENh/) | [**Project Page**](https://mias.group/ViPOcc)
 
