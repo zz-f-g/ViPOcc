@@ -6,6 +6,7 @@ https://github.com/kwea123/nerf_pl
 """
 import torch
 from dotmap import DotMap
+from torch.nn import functional as F
 
 
 class _RenderWrapper(torch.nn.Module):
@@ -170,6 +171,10 @@ class NeRFRenderer(torch.nn.Module):
         rgbs = rgbs.reshape(B, K, -1)  # (B, K, 12)
         invalid = invalid.reshape(B, K, -1)
         sigmas = sigmas.reshape(B, K)
+        sigmas_valid = torch.where(torch.all(invalid, dim=-1), 0.0, sigmas).view(-1)
+        sigmas_sharpened = F.softmax(sigmas_valid) * sigmas_valid.sum().detach()
+        sigmas_sharpened = sigmas_sharpened - sigmas_sharpened.min()
+        loss_sigma = ((sigmas_valid - sigmas_sharpened)**2).mean()
 
         if self.training and self.noise_std > 0.0:
             sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
@@ -203,7 +208,8 @@ class NeRFRenderer(torch.nn.Module):
             alphas,
             invalid,
             z_samp,
-            rgbs
+            rgbs,
+            loss_sigma,
         )
     def composite_depth(self, model, rays, z_samp, coarse=True, sb=0):
         """
@@ -293,10 +299,11 @@ class NeRFRenderer(torch.nn.Module):
 
         outputs = DotMap(
             coarse=self._format_outputs(
-                coarse_composite, superbatch_size, want_weights=want_weights, want_alphas=want_alphas,
+                coarse_composite[:-1], superbatch_size, want_weights=want_weights, want_alphas=want_alphas,
                 want_z_samps=want_z_samps, want_rgb_samps=want_rgb_samps
             ),
         )
+        outputs.coarse.loss_sigma = coarse_composite[-1]
 
         return outputs
 

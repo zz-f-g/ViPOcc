@@ -78,6 +78,7 @@ loss:
   lambda_depth_recon: 0.005
   lambda_temporal_alignment: 0.01
   depth_recon_version: 1
+  loss_sigma_weight: 0.05
 
 
 scheduler:
