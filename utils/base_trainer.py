@@ -7,6 +7,7 @@ from typing import Union
 
 from omegaconf import OmegaConf
 
+import hydra
 import ignite
 import ignite.distributed as idist
 import torch
@@ -27,17 +28,17 @@ def base_training(local_rank, config, get_dataflow, initialize, get_metrics, vis
     manual_seed(config["seed"] + rank)
     device = idist.device()
 
-    output_path = config["output_path"]
+    # output_path = config["output_path"]
+    output_path = hydra.core.hydra_config.HydraConfig.get().run.dir
     if rank == 0:
-        if config["stop_iteration"] is None:
-            now = datetime.now().strftime("%Y%m%d-%H%M%S")
-        else:
-            now = f"stop-on-{config['stop_iteration']}"
+        logger = setup_logger(name=config["name"], filepath=os.path.join(output_path, 'train.log'))
+        folder_name = f"{config['name']}"
+        if config["stop_iteration"] is not None:
+            folder_name += f"_stop-on-{config['stop_iteration']}"
 
-        output_path = Path(output_path) / now
+        output_path = Path(output_path) / folder_name
         output_path.mkdir(parents=True, exist_ok=True)
         config["output_path"] = output_path.as_posix()
-        logger = setup_logger(name=config["name"], filepath=os.path.join(config["output_path"], 'log.txt'))
         log_basic_info(logger, config)
         logger.info(f"Output path: {config['output_path']}")
 

@@ -1,6 +1,8 @@
+import os
 from datetime import datetime
 from pathlib import Path
 
+import hydra
 import ignite
 import ignite.distributed as idist
 import torch
@@ -17,18 +19,16 @@ def base_evaluation(local_rank, config, get_dataflow, initialize, get_metrics):
     manual_seed(config["seed"] + rank)
     device = idist.device()
 
-    logger = setup_logger(name=config["name"])
-
+    # output_path = config["output_path"]
+    output_path = hydra.core.hydra_config.HydraConfig.get().run.dir
+    logger = setup_logger(name=config["name"], filepath=os.path.join(output_path, 'eval.log'))
     log_basic_info(logger, config)
 
-    output_path = config["output_path"]
     if rank == 0:
-        if config["stop_iteration"] is None:
-            now = datetime.now().strftime("%Y%m%d-%H%M%S")
-        else:
-            now = f"stop-on-{config['stop_iteration']}"
+        folder_name = f"{config['name']}"
+        if config["stop_iteration"] is not None:
+            folder_name += f"_stop-on-{config['stop_iteration']}"
 
-        folder_name = f"{config['name']}_backend-{idist.backend()}-{idist.get_world_size()}_{now}"
         output_path = Path(output_path) / folder_name
         if not output_path.exists():
             output_path.mkdir(parents=True)
