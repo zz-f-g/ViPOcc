@@ -91,6 +91,7 @@ class ReconstructionLoss:
         self.lambda_temporal_alignment = config.get("lambda_temporal_alignment", 0)
 
         self.depth_recon_version = config.get("depth_recon_version", 1)
+        self.loss_sigma_weight = config.get("loss_sigma_weight", 0)
 
     @staticmethod
     def get_loss_metric_names():
@@ -268,7 +269,9 @@ class ReconstructionLoss:
             loss_temp_align = temporal_loss + geometry_consistency_loss
 
             loss += loss_temp_align * self.lambda_temporal_alignment
+            loss = loss + self.loss_sigma_weight * coarse_0["loss_sigma"]
 
+        loss_dict["loss_sigma"] = coarse_0["loss_sigma"]
         loss_dict["loss_rgb_coarse"] = loss_coarse_all
         loss_dict["loss_rgb_fine"] = loss_fine_all
         loss_dict["loss_depth_super"] = loss_depth_super
