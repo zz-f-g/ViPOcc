@@ -1,0 +1,12 @@
+[tool.basedpyright]
+typeCheckingMode = "off"
+inlay_hint = true
+"exclude" = [
+    "data",
+    "out",
+    "checkpoints",
+    ".git",
+    ".venv",
+    "__pycache__",
+]
+

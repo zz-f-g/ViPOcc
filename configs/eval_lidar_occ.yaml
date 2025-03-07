@@ -22,7 +22,7 @@ data:
   return_fisheye: false
   return_stereo: false
   data_fc: 1
-  is_preprocessed: false
+  is_preprocessed: true
   data_path: "data/KITTI-360"
   pose_path: "data/KITTI-360/data_poses"
 
