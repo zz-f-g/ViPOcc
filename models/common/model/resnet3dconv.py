@@ -1,5 +1,4 @@
 import torch
-import torch.autograd.profiler as profiler
 from torch import nn
 
 
@@ -48,15 +47,14 @@ class ResnetBlock3DConv(nn.Module):
             nn.init.kaiming_normal_(self.shortcut.weight, a=0, mode="fan_in")
 
     def forward(self, x):
-        with profiler.record_function("resblock"):
-            net = self.conv_0(self.activation(x))
-            dx = self.conv_1(self.activation(net))
+        net = self.conv_0(self.activation(x))
+        dx = self.conv_1(self.activation(net))
 
-            if self.shortcut is not None:
-                x_s = self.shortcut(x)
-            else:
-                x_s = x
-            return x_s + dx
+        if self.shortcut is not None:
+            x_s = self.shortcut(x)
+        else:
+            x_s = x
+        return x_s + dx
 
 
 class Resnet3DConv(nn.Module):
@@ -110,17 +108,16 @@ class Resnet3DConv(nn.Module):
         Tensor will be reshaped to (-1, combine_inner_dims, ...) and reduced using combine_type
         on dim 1, at combine_layer
         """
-        with profiler.record_function("resnet3dconv_infer"):
-            x = zx
-            if self.d_in > 0:
-                x = self.conv_in(x)
-            else:
-                x = torch.zeros(self.d_hidden, device=zx.device)
+        x = zx
+        if self.d_in > 0:
+            x = self.conv_in(x)
+        else:
+            x = torch.zeros(self.d_hidden, device=zx.device)
 
-            for blkid in range(self.n_blocks):
-                x = self.blocks[blkid](x)
-            out = self.conv_out(self.activation(x))
-            return out
+        for blkid in range(self.n_blocks):
+            x = self.blocks[blkid](x)
+        out = self.conv_out(self.activation(x))
+        return out
 
     @classmethod
     def from_conf(cls, conf, d_in, d_out, **kwargs):

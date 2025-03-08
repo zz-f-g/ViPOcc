@@ -1,7 +1,6 @@
 from torch import nn
 import torch
 
-import torch.autograd.profiler as profiler
 from models.common import util
 
 
@@ -49,15 +48,14 @@ class ResnetBlockFC(nn.Module):
             nn.init.kaiming_normal_(self.shortcut.weight, a=0, mode="fan_in")
 
     def forward(self, x):
-        with profiler.record_function("resblock"):
-            net = self.fc_0(self.activation(x))
-            dx = self.fc_1(self.activation(net))
+        net = self.fc_0(self.activation(x))
+        dx = self.fc_1(self.activation(net))
 
-            if self.shortcut is not None:
-                x_s = self.shortcut(x)
-            else:
-                x_s = x
-            return x_s + dx
+        if self.shortcut is not None:
+            x_s = self.shortcut(x)
+        else:
+            x_s = x
+        return x_s + dx
 
 
 class ResnetFC(nn.Module):

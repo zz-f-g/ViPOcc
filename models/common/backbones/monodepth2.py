@@ -1,7 +1,5 @@
 from collections import OrderedDict
 
-from torch import profiler
-
 from models.common.model.layers import *
 
 import numpy as np
@@ -209,32 +207,31 @@ class Decoder(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, input_features):
-        with profiler.record_function("encoder_forward"):
-            self.outputs = {}
+        self.outputs = {}
 
-            # decoder
-            x = input_features[-1]
-            for i in range(4, -1, -1):
-                x = self.decoder[self.decoder_keys[("upconv", i, 0)]](x)
+        # decoder
+        x = input_features[-1]
+        for i in range(4, -1, -1):
+            x = self.decoder[self.decoder_keys[("upconv", i, 0)]](x)
 
-                x = [F.interpolate(x, scale_factor=(2, 2), mode="nearest")]
+            x = [F.interpolate(x, scale_factor=(2, 2), mode="nearest")]
 
-                if self.use_skips and i > 0:
-                    feats = input_features[i - 1]
+            if self.use_skips and i > 0:
+                feats = input_features[i - 1]
 
-                    if x[0].shape[2] > feats.shape[2]:
-                        x[0] = x[0][:, :, :feats.shape[2], :]
-                    if x[0].shape[3] > feats.shape[3]:
-                        x[0] = x[0][:, :, :, :feats.shape[3]]
-                    x += [feats]
-                x = torch.cat(x, 1)
+                if x[0].shape[2] > feats.shape[2]:
+                    x[0] = x[0][:, :, :feats.shape[2], :]
+                if x[0].shape[3] > feats.shape[3]:
+                    x[0] = x[0][:, :, :, :feats.shape[3]]
+                x += [feats]
+            x = torch.cat(x, 1)
 
-                x = self.decoder[self.decoder_keys[("upconv", i, 1)]](x)
+            x = self.decoder[self.decoder_keys[("upconv", i, 1)]](x)
 
-                self.outputs[("features", i)] = x
+            self.outputs[("features", i)] = x
 
-                if i in self.scales:
-                    self.outputs[("disp", i)] = self.decoder[self.decoder_keys[("dispconv", i)]](x)
+            if i in self.scales:
+                self.outputs[("disp", i)] = self.decoder[self.decoder_keys[("dispconv", i)]](x)
 
         return self.outputs
 

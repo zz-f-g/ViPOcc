@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import torch.autograd.profiler as profiler
 
 
 class PositionalEncoding(torch.nn.Module):
@@ -33,13 +32,12 @@ class PositionalEncoding(torch.nn.Module):
         :param x (batch, self.d_in)
         :return (batch, self.d_out)
         """
-        with profiler.record_function("positional_enc"):
-            embed = x.unsqueeze(1).repeat(1, self.num_freqs * 2, 1)
-            embed = torch.sin(torch.addcmul(self._phases, embed, self._freqs))
-            embed = embed.view(x.shape[0], -1)
-            if self.include_input:
-                embed = torch.cat((x, embed), dim=-1)
-            return embed
+        embed = x.unsqueeze(1).repeat(1, self.num_freqs * 2, 1)
+        embed = torch.sin(torch.addcmul(self._phases, embed, self._freqs))
+        embed = embed.view(x.shape[0], -1)
+        if self.include_input:
+            embed = torch.cat((x, embed), dim=-1)
+        return embed
 
     @classmethod
     def from_conf(cls, conf, d_in=3):
