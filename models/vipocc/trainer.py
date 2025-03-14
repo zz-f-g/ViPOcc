@@ -104,11 +104,15 @@ class BTSWrapper(nn.Module):
         poses = torch.stack(data["poses"], dim=1)  # n, v, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)  # n, v, 4, 4 (-1, 1)
         bboxes_3d = [
-            Bbox(
-                center=bbox_dict["center"],
-                whl=bbox_dict["whl"],
-                rotation=bbox_dict["rotation"],
-                label=bbox_dict["semanticId"],
+            (
+                Bbox(
+                    center=bbox_dict["center"],
+                    whl=bbox_dict["whl"],
+                    rotation=bbox_dict["rotation"],
+                    label=bbox_dict["semanticId"],
+                )
+                if bbox_dict
+                else None
             )
             for bbox_dict in data["3d_bboxes"]
         ]

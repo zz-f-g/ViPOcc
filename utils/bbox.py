@@ -93,6 +93,10 @@ def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox])
     densities = []
     masks = []
     for feature_eatch_batch, point_eatch_batch, bbox in zip(feature, point, bboxes):
+        if bbox is None:
+            densities.append(point.new_zeros((p,))) # [NP]
+            masks.append(point.new_zeros((p,)).to(torch.bool)) # [NP]
+            continue
         n_bbox_this_batch = bbox.center.shape[0]
         point_in_bbox, mask = point_in_which_bbox(
             point_eatch_batch, bbox

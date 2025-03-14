@@ -542,33 +542,40 @@ class Kitti360Dataset(Dataset):
         transform_w2c = lambda verts: (
             pose_w2c[:3, :3] @ verts.T + pose_w2c[:3, 3, None]
         ).T
-        vertices, semanticId = zip(
-            *map(
-                lambda bbox: (transform_w2c(bbox.vertices), bbox.semanticId),
-                filter(
-                    (
-                        (
-                            lambda bbox: id2label[bbox.semanticId].name
-                            in self.bboxes_semantic_labels
-                        )
-                        if self.bboxes_semantic_labels
-                        else (lambda _: True)
-                    ),
-                    filter(filter_bbox, seq_3d_bboxes[-1] + seq_3d_bboxes[img_id]),
-                ),
-            )
-        )
-        # bboxes = [{
-        #     "vertices": transform_w2c(bbox.vertices), # vertices in cam coordinates
-        #     "faces": bbox.faces,
-        #     "semanticId": bbox.semanticId,
-        #     "instanceId": bbox.instanceId
-        # } for i, bbox in enumerate(bboxes)] #if valid[i]
+        vertices = []
+        semanticId = []
+        for bbox in seq_3d_bboxes[-1] + seq_3d_bboxes[img_id]:
+            if not filter_bbox(bbox):
+                continue
+            if self.bboxes_semantic_labels:
+                if id2label[bbox.semanticId].name not in self.bboxes_semantic_labels:
+                    continue
+            vertices.append(transform_w2c(bbox.vertices))
+            semanticId.append(bbox.semanticId)
+        # vertices, semanticId = zip(
+        #     *map(
+        #         lambda bbox: (transform_w2c(bbox.vertices), bbox.semanticId),
+        #         filter(
+        #             (
+        #                 (
+        #                     lambda bbox: id2label[bbox.semanticId].name
+        #                     in self.bboxes_semantic_labels
+        #                 )
+        #                 if self.bboxes_semantic_labels
+        #                 else (lambda _: True)
+        #             ),
+        #             filter(filter_bbox, ),
+        #         ),
+        #     )
+        # )
 
-        return {
-            "vertices": torch.tensor(np.stack(list(vertices), axis=0)),
-            "semanticId": torch.tensor(np.array(list(semanticId))),
-        }
+        if vertices:
+            return {
+                "vertices": torch.tensor(np.stack(list(vertices), axis=0)),
+                "semanticId": torch.tensor(np.array(list(semanticId))),
+            }
+        else:
+            return {}
 
     def load_segmentation(self, seq, img_id):
         seg = cv2.imread(os.path.join(self.data_path, "data_2d_semantics", "train", seq, "image_00", "semantic",
@@ -779,6 +786,7 @@ class Kitti360Dataset(Dataset):
         bboxes_3d = {}
         if self.return_3d_bboxes:
             bboxes_3d.update(self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0]))
+        if bboxes_3d:
             bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
 
         if self.return_segmentation:
