@@ -28,6 +28,8 @@ data:
   fisheye_rotation: [ 0, -15 ]
   return_gt_depth: true
   return_pseudo_depth: true
+  return_3d_bboxes: true
+  bboxes_semantic_labels: ["car",]
 
 model_conf:
   arch: "BTSNet"

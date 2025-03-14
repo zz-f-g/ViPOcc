@@ -1,5 +1,6 @@
 import os
 import time
+import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -14,6 +15,9 @@ from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 from torchvision.transforms import ColorJitter
 
+from datasets.kitti_360.annotation import KITTI360Bbox3D
+from datasets.kitti_360.labels import id2label
+from datasets.kitti_360.process_bbox3d import convert_vertices
 from utils.augmentation import get_color_aug_fn
 import random
 
@@ -80,6 +84,8 @@ class Kitti360Dataset(Dataset):
                  return_gt_depth=False,
                  return_samples=False,
                  return_fisheye=True,
+                 return_3d_bboxes=False,
+                 bboxes_semantic_labels=["car",],
                  return_segmentation=False,
                  frame_count=2,
                  keyframe_offset=0,
@@ -102,6 +108,8 @@ class Kitti360Dataset(Dataset):
         self.return_fisheye = return_fisheye
         self.return_pseudo_depth = return_pseudo_depth
         self.return_gt_depth = return_gt_depth
+        self.return_3d_bboxes = return_3d_bboxes
+        self.bboxes_semantic_labels = bboxes_semantic_labels
         self.return_segmentation = return_segmentation
         self.return_samples = return_samples
 
@@ -145,6 +153,9 @@ class Kitti360Dataset(Dataset):
             self._datapoints = self._semantics_split(self._sequences, self.data_path, self._img_ids)
         else:
             self._datapoints = self._full_split(self._sequences, self._img_ids, self.check_file_integrity)
+
+        if self.return_3d_bboxes:
+            self._3d_bboxes = self._load_3d_bboxes(Path(data_path) / "data_3d_bboxes" / "train", self._sequences)
 
         if self.return_segmentation:
             # Segmentations are only provided for the left camera
@@ -429,6 +440,28 @@ class Kitti360Dataset(Dataset):
             poses[seq] = poses_seq
         return ids, poses
 
+    @staticmethod
+    def _load_3d_bboxes(bbox_path, sequences):
+        bboxes = {}
+        for seq in sequences:
+            with open(Path(bbox_path) / f"{seq}.xml", "rb") as f:
+                tree = ET.parse(f)
+            root = tree.getroot()
+            objects = defaultdict(list)
+            num_bbox = 0
+            for child in root:
+                if child.find('transform') is None:
+                    continue
+                obj = KITTI360Bbox3D()
+                if child.find("semanticId") is not None:
+                    obj.parseBbox(child)
+                else:
+                    obj.parseStuff(child)
+                objects[obj.timestamp].append(obj)
+                num_bbox +=1
+            bboxes[seq] = objects
+        return bboxes
+
     def get_img_id_from_id(self, sequence, id):
         return self._img_ids[sequence][id]
 
@@ -493,6 +526,49 @@ class Kitti360Dataset(Dataset):
         img = img * 2 - 1
 
         return img  # [-1,1]
+
+    def get_3d_bboxes(self, seq, img_id, pose, projs):
+        seq_3d_bboxes = self._3d_bboxes[seq]
+        pose_w2c = np.linalg.inv(pose)
+
+        def filter_bbox(bbox):
+            verts = bbox.vertices
+            verts = (projs @ (pose_w2c[:3, :3] @ verts.T + pose_w2c[:3, 3, None])).T
+            verts[:, :2] /= verts[:, 2:3]
+            valid = ((verts[:, 0] >= -1) & (verts[:, 0] <= 1)) & ((verts[:, 1] >= -1) & (verts[:, 1] <= 1)) & ((verts[:, 2] > 3) & (verts[:, 2] <= 80))
+            valid = np.any(valid, axis=-1)
+            return valid
+
+        transform_w2c = lambda verts: (
+            pose_w2c[:3, :3] @ verts.T + pose_w2c[:3, 3, None]
+        ).T
+        vertices, semanticId = zip(
+            *map(
+                lambda bbox: (transform_w2c(bbox.vertices), bbox.semanticId),
+                filter(
+                    (
+                        (
+                            lambda bbox: id2label[bbox.semanticId].name
+                            in self.bboxes_semantic_labels
+                        )
+                        if self.bboxes_semantic_labels
+                        else (lambda _: True)
+                    ),
+                    filter(filter_bbox, seq_3d_bboxes[-1] + seq_3d_bboxes[img_id]),
+                ),
+            )
+        )
+        # bboxes = [{
+        #     "vertices": transform_w2c(bbox.vertices), # vertices in cam coordinates
+        #     "faces": bbox.faces,
+        #     "semanticId": bbox.semanticId,
+        #     "instanceId": bbox.instanceId
+        # } for i, bbox in enumerate(bboxes)] #if valid[i]
+
+        return {
+            "vertices": torch.tensor(np.stack(list(vertices), axis=0)),
+            "semanticId": torch.tensor(np.array(list(semanticId))),
+        }
 
     def load_segmentation(self, seq, img_id):
         seg = cv2.imread(os.path.join(self.data_path, "data_2d_semantics", "train", seq, "image_00", "semantic",
@@ -700,6 +776,11 @@ class Kitti360Dataset(Dataset):
         else:
             samples = []
 
+        bboxes_3d = {}
+        if self.return_3d_bboxes:
+            bboxes_3d.update(self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0]))
+            bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
+
         if self.return_segmentation:
             segs = [self.load_segmentation(sequence, img_ids[0])]
         else:
@@ -720,6 +801,7 @@ class Kitti360Dataset(Dataset):
             "pseudo_depth": pseudo_depth,
             "samples": samples,
             "ts": ids,
+            "3d_bboxes": bboxes_3d,
             "segs": segs,
             "t__get_item__": np.array([_proc_time]),
             "index": np.array([index]),

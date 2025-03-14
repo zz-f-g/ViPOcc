@@ -7,6 +7,7 @@ from ignite.metrics import RunningAverage
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
+from torch.utils.data import default_collate
 
 from datasets.data_util import make_datasets
 from datasets.kitti_raw.kitti_raw_dataset import KittiRawDataset
@@ -23,6 +24,7 @@ from utils.base_trainer import base_training
 from utils.metrics import MeanMetric
 from utils.modules import DepthRefinement
 from utils.projection_operations import distance_to_z
+from utils.bbox import Bbox
 
 
 class BTSWrapper(nn.Module):
@@ -101,6 +103,15 @@ class BTSWrapper(nn.Module):
         images = torch.stack(data["imgs"], dim=1)  # n, v, 3, h, w
         poses = torch.stack(data["poses"], dim=1)  # n, v, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)  # n, v, 4, 4 (-1, 1)
+        bboxes_3d = [
+            Bbox(
+                center=bbox_dict["center"],
+                whl=bbox_dict["whl"],
+                rotation=bbox_dict["rotation"],
+                label=bbox_dict["semanticId"],
+            )
+            for bbox_dict in data["3d_bboxes"]
+        ]
 
         n, v, c, h, w = images.shape
 
@@ -304,11 +315,34 @@ def get_dataflow(config, logger=None):
         # Ensure that only local rank 0 download the dataset
         idist.barrier()
 
+    def bbox3d_collate_fn(batch):
+        first_element = batch[0]
+        collated_batch = {}
+        for key in first_element:
+            if key == "3d_bboxes":
+                collated_batch["3d_bboxes"] = [
+                    element["3d_bboxes"]
+                    for element in batch
+                ]
+            else:
+                collated_batch[key] = default_collate([element[key] for element in batch])
+        return collated_batch
+
     # Setup data loader also adapted to distributed config: nccl, gloo, xla-tpu
-    train_loader = idist.auto_dataloader(train_dataset, batch_size=config["batch_size"],
-                                         num_workers=config["num_workers"], shuffle=True, drop_last=True)
-    test_loader = idist.auto_dataloader(test_dataset, batch_size=1, num_workers=config["num_workers"], shuffle=False)
-    vis_loader = idist.auto_dataloader(vis_dataset, batch_size=1, num_workers=1, shuffle=False)
+    train_loader = idist.auto_dataloader(
+        train_dataset,
+        batch_size=config["batch_size"],
+        num_workers=config["num_workers"],
+        shuffle=True,
+        drop_last=True,
+        collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
+    )
+    test_loader = idist.auto_dataloader(
+        test_dataset, batch_size=1, num_workers=config["num_workers"], shuffle=False
+    )
+    vis_loader = idist.auto_dataloader(
+        vis_dataset, batch_size=1, num_workers=1, shuffle=False
+    )
 
     return train_loader, test_loader, vis_loader
 
