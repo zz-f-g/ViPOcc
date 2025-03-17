@@ -206,7 +206,7 @@ class BTSWrapper(nn.Module):
         else:
             # Sample rays from N_loss images by random patches. all_rays: [B, 4096, 8];   all_rgb_gt: [B, 4096, 3]
             all_rays, all_rgb_gt = sampler.sample(images_ip[:, ids_loss], poses[:, ids_loss], projs[:, ids_loss])
-        render_dict = self.renderer(all_rays, want_weights=True, want_alphas=True, want_rgb_samps=True)
+        render_dict = self.renderer(all_rays, bboxes_3d, want_weights=True, want_alphas=True, want_rgb_samps=True)
 
         data["fine"] = []
         data["coarse"] = []
@@ -342,10 +342,18 @@ def get_dataflow(config, logger=None):
         collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
     )
     test_loader = idist.auto_dataloader(
-        test_dataset, batch_size=1, num_workers=config["num_workers"], shuffle=False
+        test_dataset,
+        batch_size=1,
+        num_workers=config["num_workers"],
+        shuffle=False,
+        collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
     )
     vis_loader = idist.auto_dataloader(
-        vis_dataset, batch_size=1, num_workers=1, shuffle=False
+        vis_dataset,
+        batch_size=1,
+        num_workers=1,
+        shuffle=False,
+        collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
     )
 
     return train_loader, test_loader, vis_loader

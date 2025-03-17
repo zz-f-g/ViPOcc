@@ -5,6 +5,7 @@ from torch import nn
 from models.common.backbones import make_backbone
 from models.common.model.code import PositionalEncoding
 from models.common.model.mlp_util import make_mlp
+from utils.bbox import get_density_in_bbox
 
 EPS = 1e-3
 
@@ -160,13 +161,14 @@ class BTSNet(torch.nn.Module):
         if self.learn_empty:
             sampled_features[invalid.expand(-1, -1, -1, c)] = empty_feature_expanded[invalid.expand(-1, -1, -1, c)]
 
-        sampled_features = torch.cat((sampled_features, xyz_code), dim=-1)  # [b,1,6250,64] + [b,1,6250,39]
+        # sampled_features = torch.cat((sampled_features, xyz_code), dim=-1)  # [b,1,6250,64] + [b,1,6250,39]
 
         if use_single_featuremap:
             sampled_features = sampled_features.mean(dim=1)
+            xyz_code = xyz_code.mean(dim=1)
             invalid = torch.any(invalid, dim=1)
 
-        return sampled_features, invalid
+        return sampled_features, xyz_code, invalid
 
     def sample_colors(self, xyz):
         """
@@ -203,7 +205,7 @@ class BTSNet(torch.nn.Module):
 
         return sampled_colors, invalid
 
-    def forward(self, xyz, coarse=True, viewdirs=None, far=False, only_density=False):
+    def forward(self, xyz, bboxes_3d, coarse=True, viewdirs=None, far=False, only_density=False):
         """
         Predict (r, g, b, sigma) at world space points xyz.
         Please call encode first!
@@ -218,32 +220,28 @@ class BTSNet(torch.nn.Module):
         nv = self.grid_c_imgs.shape[1]
 
         # Sampled features all has shape: scales [n, n_pts, c + xyz_code]
-        sampled_features, invalid_features = self.sample_features(xyz, use_single_featuremap=not only_density)
-        sampled_features = sampled_features.reshape(n * n_pts, -1)  # [b,6250,103] --> [b*6250,103]
+        sampled_features, xyz_code, invalid_features = self.sample_features(xyz, use_single_featuremap=not only_density)
 
-        mlp_input = sampled_features.view(n, n_pts, -1)
+        mlp_input = torch.cat((sampled_features, xyz_code), dim=-1)#sampled_features.view(n, n_pts, -1)
 
         # Run main NeRF network
-        if coarse or self.mlp_fine is None:
-            mlp_output = self.mlp_coarse(
-                mlp_input,
-                combine_inner_dims=(n_pts,),
-            )  # [16,6250,1]
-        else:
-            mlp_output = self.mlp_fine(
-                mlp_input,
-                combine_inner_dims=(n_pts,),
-            )
+        mlp_output = self.mlp_coarse(
+            mlp_input,
+            combine_inner_dims=(n_pts,),
+        )  # [16,6250,1]
+        if bboxes_3d:
+            sigma_in_bbox, bbox_mask = get_density_in_bbox(self.mlp_fine, sampled_features, xyz, bboxes_3d, self.code_xyz)
 
         # (n, pts, c) -> (n, n_pts, c)
         mlp_output = mlp_output.reshape(n, n_pts, self._d_out)
 
+        sigma = mlp_output[..., 0]
+        if bboxes_3d:
+            sigma = torch.where(bbox_mask, sigma_in_bbox, sigma)[..., None]
         if self.sample_color:
-            sigma = mlp_output[..., :1]
             sigma = F.softplus(sigma)
             rgb, invalid_colors = self.sample_colors(xyz)  # (n, nv, pts, 3)
         else:
-            sigma = mlp_output[..., :1]
             sigma = F.relu(sigma)
             rgb = mlp_output[..., 1:4].reshape(n, 1, n_pts, 3)
             rgb = F.sigmoid(rgb)

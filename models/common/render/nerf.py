@@ -16,7 +16,7 @@ class _RenderWrapper(torch.nn.Module):
         self.renderer = renderer
         self.simple_output = simple_output
 
-    def forward(self, rays, want_weights=False, want_alphas=False, want_z_samps=False, want_rgb_samps=False, depth_only=False):
+    def forward(self, rays, bboxes_3d=None, want_weights=False, want_alphas=False, want_z_samps=False, want_rgb_samps=False, depth_only=False):
         if rays.shape[0] == 0:
             return (
                 torch.zeros(0, 3, device=rays.device),
@@ -26,6 +26,7 @@ class _RenderWrapper(torch.nn.Module):
         outputs = self.renderer(
             self.net,
             rays,
+            bboxes_3d,
             want_weights=want_weights and not self.simple_output,
             want_alphas=want_alphas and not self.simple_output,
             want_z_samps=want_z_samps and not self.simple_output,
@@ -122,7 +123,7 @@ class NeRFRenderer(torch.nn.Module):
             samples = 1 / (1 / near * (1 - z_steps) + 1 / far * z_steps)  # (B, Kf)
         return samples
 
-    def composite(self, model, rays, z_samp, coarse=True, sb=0):
+    def composite(self, model, rays, z_samp, bboxes_3d, coarse=True, sb=0):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
         given sampled positions along each ray (see sample_*)
@@ -158,7 +159,7 @@ class NeRFRenderer(torch.nn.Module):
         split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
 
         for pnts in split_points:
-            rgbs, invalid, sigmas = model(pnts, coarse=coarse)
+            rgbs, invalid, sigmas = model(pnts, bboxes_3d, coarse=coarse)
             rgbs_all.append(rgbs)
             invalid_all.append(invalid)
             sigmas_all.append(sigmas)
@@ -211,7 +212,7 @@ class NeRFRenderer(torch.nn.Module):
             rgbs,
             loss_sigma,
         )
-    def composite_depth(self, model, rays, z_samp, coarse=True, sb=0):
+    def composite_depth(self, model, rays, z_samp, bboxes_3d, coarse=True, sb=0):
         """
         Render RGB and depth for each ray using NeRF alpha-compositing formula,
         given sampled positions along each ray (see sample_*)
@@ -246,7 +247,7 @@ class NeRFRenderer(torch.nn.Module):
         split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
 
         for pnts in split_points:
-            rgbs, invalid, sigmas = model(pnts, coarse=coarse)
+            rgbs, invalid, sigmas = model(pnts, bboxes_3d, coarse=coarse)
             sigmas_all.append(sigmas)
 
         # (B*K, 4) OR (SB, B'*K, 4)
@@ -269,7 +270,7 @@ class NeRFRenderer(torch.nn.Module):
         return depth_final
 
     def forward(
-            self, model, rays, want_weights=False, want_alphas=False, want_z_samps=False, want_rgb_samps=False, depth_only=False
+            self, model, rays, bboxes_3d, want_weights=False, want_alphas=False, want_z_samps=False, want_rgb_samps=False, depth_only=False
     ):
         """
         :model: nerf model, should return (SB, B, (r, g, b, sigma))
@@ -291,11 +292,11 @@ class NeRFRenderer(torch.nn.Module):
 
         z_coarse = self.sample_coarse(rays)  # [65536, 8] --> [65536, 64]
         if depth_only:
-            depth = self.composite_depth(model, rays, z_coarse, coarse=True, sb=superbatch_size)
+            depth = self.composite_depth(model, rays, z_coarse, bboxes_3d, coarse=True, sb=superbatch_size)
             depth = depth.reshape(superbatch_size, -1)
             return depth
         else:
-            coarse_composite = self.composite(model, rays, z_coarse, coarse=True, sb=superbatch_size)
+            coarse_composite = self.composite(model, rays, z_coarse, bboxes_3d, coarse=True, sb=superbatch_size)
 
         outputs = DotMap(
             coarse=self._format_outputs(

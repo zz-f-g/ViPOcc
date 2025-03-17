@@ -571,8 +571,8 @@ class Kitti360Dataset(Dataset):
 
         if vertices:
             return {
-                "vertices": torch.tensor(np.stack(list(vertices), axis=0)),
-                "semanticId": torch.tensor(np.array(list(semanticId))),
+                "vertices": torch.tensor(np.stack(list(vertices), axis=0), dtype=torch.float32),
+                "semanticId": torch.tensor(np.array(list(semanticId)), dtype=torch.float32),
             }
         else:
             return {}

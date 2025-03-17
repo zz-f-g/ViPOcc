@@ -3,6 +3,8 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from models.common.model.code import PositionalEncoding
+
 
 class Bbox(NamedTuple):
     """
@@ -59,6 +61,14 @@ def point_in_which_bbox(point: Tensor, bbox: Bbox):
     ...         [1.6, 0.4, 0.6],
     ...     ]
     ... )
+    >>> point_in_which_bbox(point, bbox)[0]
+    tensor([[0.0000, 0.0000, 0.0000],
+            [0.6000, 1.2000, 0.4000],
+            [0.9000, 0.0000, 0.6000],
+            [0.9000, 0.8000, 0.9333],
+            [1.1000, 0.8000, 0.4000],
+            [0.9000, 0.8000, 0.9333],
+            [1.6000, 0.8000, 0.4000]])
     >>> point_in_which_bbox(point, bbox)[1]
     tensor([[ True, False,  True,  True, False, False, False],
             [False, False, False, False, False,  True, False]])
@@ -75,17 +85,28 @@ def point_in_which_bbox(point: Tensor, bbox: Bbox):
         ),
         dim=2,
     )  # [NB, 4, 4]
-    point_in_bbox = (torch.inverse(t_b2c) @ point_homogenous.permute(1, 0))[
-        :, :3, :
-    ] / (
-        bbox.whl[..., None] / 2
-    )  # [NB, 3, NP]
-    return point_in_bbox.permute(0, 2, 1), torch.all(
-        (point_in_bbox > -1) & (point_in_bbox < 1), dim=1
-    )  # [NB, NP, 3], [NB, NP]
+    point_in_bbox = (
+        (torch.inverse(t_b2c) @ point_homogenous.permute(1, 0))[:, :3, :]
+        / (bbox.whl[..., None] / 2)
+    ).permute(
+        0, 2, 1
+    )  # [NB, NP, 3]
+    mask = torch.all(
+        (point_in_bbox > -1) & (point_in_bbox < 1), dim=2
+    )  # [NB, NP] {bool}
+    return (
+        torch.gather(
+            point_in_bbox,
+            dim=0,
+            index=torch.argmax(mask.to(torch.int8), dim=0)[None, :, None].expand(
+                -1, -1, 3
+            ),
+        )[0],
+        mask,
+    )
 
 
-def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox]):
+def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox], code_xyz: PositionalEncoding):
     n, p, cf = feature.shape
     assert point.shape == (n, p, 3)
     assert len(bboxes) == n
@@ -100,13 +121,20 @@ def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox])
         n_bbox_this_batch = bbox.center.shape[0]
         point_in_bbox, mask = point_in_which_bbox(
             point_eatch_batch, bbox
-        )  # [NB, NP, 3] [NB, NP]
+        )  # [NP, 3] [NB, NP]
+        mask = mask.any(dim=0) # [NP]
         density_eatch_batch = mask.to(feature.dtype) * mlp(
-            feature_eatch_batch[None, ...].expand(n_bbox_this_batch, -1, -1),
-            point_in_bbox,
-        )  # [NB, NP]
-        densities.append(1 - (1 - density_eatch_batch).prod(dim=0))  # [NP]
-        masks.append(mask.any(dim=0))  # [NP]
+            torch.cat(
+                [
+                    feature_eatch_batch, # [p, cf]
+                    code_xyz(point_in_bbox), # [p, 39]
+                ],
+                dim=-1
+            ),
+            combine_inner_dims =(p,),
+        )[..., 0]  # [NP]
+        densities.append(density_eatch_batch)  # [NP]
+        masks.append(mask)  # [NP]
 
     return torch.stack(densities, dim=0), torch.stack(masks, dim=0)  # [B, NP] [B, NP]
 
