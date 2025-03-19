@@ -147,7 +147,7 @@ class NeRFRenderer(torch.nn.Module):
         # points = z_samp.frustums.get_positions()
         points = points.reshape(-1, 3)  # (B*K, 3)
 
-        rgbs_all, invalid_all, sigmas_all = [], [], []
+        rgbs_all, invalid_all, sigmas_all, sigmas_gap_all = [], [], [], []
         if sb > 0:  # superbatch, 16
             points = points.reshape(sb, -1, 3)  # (SB, B'*K, 3) B' is real ray batch size
             eval_batch_size = (self.eval_batch_size - 1) // sb + 1
@@ -159,15 +159,17 @@ class NeRFRenderer(torch.nn.Module):
         split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
 
         for pnts in split_points:
-            rgbs, invalid, sigmas = model(pnts, bboxes_3d, coarse=coarse)
+            rgbs, invalid, sigmas, sigmas_gap = model(pnts, bboxes_3d, coarse=coarse)
             rgbs_all.append(rgbs)
             invalid_all.append(invalid)
             sigmas_all.append(sigmas)
+            sigmas_gap_all.append(sigmas_gap)
 
         # (B*K, 4) OR (SB, B'*K, 4)
         rgbs = torch.cat(rgbs_all, dim=eval_batch_dim)
         invalid = torch.cat(invalid_all, dim=eval_batch_dim)
         sigmas = torch.cat(sigmas_all, dim=eval_batch_dim)
+        sigmas_gap = torch.cat(sigmas_gap_all, dim=eval_batch_dim)
 
         rgbs = rgbs.reshape(B, K, -1)  # (B, K, 12)
         invalid = invalid.reshape(B, K, -1)
@@ -176,6 +178,9 @@ class NeRFRenderer(torch.nn.Module):
         sigmas_sharpened = F.softmax(sigmas_valid) * sigmas_valid.sum().detach()
         sigmas_sharpened = sigmas_sharpened - sigmas_sharpened.min()
         loss_sigma = ((sigmas_valid - sigmas_sharpened)**2).mean()
+
+        sigmas_gap = sigmas_gap.reshape(B, K)
+        loss_gap = (torch.where(torch.all(invalid, dim=-1), 0.0, sigmas_gap) ** 2).mean()
 
         if self.training and self.noise_std > 0.0:
             sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
@@ -210,7 +215,7 @@ class NeRFRenderer(torch.nn.Module):
             invalid,
             z_samp,
             rgbs,
-            loss_sigma,
+            (loss_sigma, loss_gap),
         )
     def composite_depth(self, model, rays, z_samp, bboxes_3d, coarse=True, sb=0):
         """
@@ -247,7 +252,7 @@ class NeRFRenderer(torch.nn.Module):
         split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
 
         for pnts in split_points:
-            rgbs, invalid, sigmas = model(pnts, bboxes_3d, coarse=coarse)
+            rgbs, invalid, sigmas, _ = model(pnts, bboxes_3d, coarse=coarse)
             sigmas_all.append(sigmas)
 
         # (B*K, 4) OR (SB, B'*K, 4)
@@ -304,7 +309,7 @@ class NeRFRenderer(torch.nn.Module):
                 want_z_samps=want_z_samps, want_rgb_samps=want_rgb_samps
             ),
         )
-        outputs.coarse.loss_sigma = coarse_composite[-1]
+        outputs.coarse.loss_sigma, outputs.coarse.loss_gap = coarse_composite[-1]
 
         return outputs
 
