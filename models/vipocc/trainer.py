@@ -7,7 +7,6 @@ from ignite.metrics import RunningAverage
 from torch import nn
 from torch import optim
 from torch.nn import functional as F
-from torch.utils.data import default_collate
 
 from datasets.data_util import make_datasets
 from datasets.kitti_raw.kitti_raw_dataset import KittiRawDataset
@@ -24,7 +23,7 @@ from utils.base_trainer import base_training
 from utils.metrics import MeanMetric
 from utils.modules import DepthRefinement
 from utils.projection_operations import distance_to_z
-from utils.bbox import Bbox
+from utils.bbox import Bbox, bbox3d_collate_fn
 
 
 class BTSWrapper(nn.Module):
@@ -318,19 +317,6 @@ def get_dataflow(config, logger=None):
     if idist.get_local_rank() == 0:
         # Ensure that only local rank 0 download the dataset
         idist.barrier()
-
-    def bbox3d_collate_fn(batch):
-        first_element = batch[0]
-        collated_batch = {}
-        for key in first_element:
-            if key == "3d_bboxes":
-                collated_batch["3d_bboxes"] = [
-                    element["3d_bboxes"]
-                    for element in batch
-                ]
-            else:
-                collated_batch[key] = default_collate([element[key] for element in batch])
-        return collated_batch
 
     # Setup data loader also adapted to distributed config: nccl, gloo, xla-tpu
     train_loader = idist.auto_dataloader(

@@ -205,7 +205,7 @@ class BTSNet(torch.nn.Module):
 
         return sampled_colors, invalid
 
-    def forward(self, xyz, bboxes_3d, coarse=True, viewdirs=None, far=False, only_density=False):
+    def forward(self, xyz, bboxes_3d=None, coarse=True, viewdirs=None, far=False, only_density=False):
         """
         Predict (r, g, b, sigma) at world space points xyz.
         Please call encode first!

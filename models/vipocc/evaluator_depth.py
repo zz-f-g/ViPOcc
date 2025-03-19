@@ -16,6 +16,7 @@ from utils.base_evaluator import base_evaluation
 from utils.metrics import MeanMetric
 from utils.modules import DepthRefinement
 from utils.projection_operations import distance_to_z
+from utils.bbox import Bbox, bbox3d_collate_fn
 
 class BTSWrapper(nn.Module):
     def __init__(self, renderer, config) -> None:
@@ -64,6 +65,19 @@ class BTSWrapper(nn.Module):
         images = torch.stack(data["imgs"], dim=1)[:, :1]  # n, 1, c, h, w
         poses = torch.stack(data["poses"], dim=1)[:, :1]  # n, 1, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)[:, :1]  # n, 1, 4, 4 (-1, 1)
+        bboxes_3d = [
+            (
+                Bbox(
+                    center=bbox_dict["center"],
+                    whl=bbox_dict["whl"],
+                    rotation=bbox_dict["rotation"],
+                    label=bbox_dict["semanticId"],
+                )
+                if bbox_dict
+                else None
+            )
+            for bbox_dict in data["3d_bboxes"]
+        ]
 
         if self.eval_rendered_depth:
             n, v, c, h, w = images.shape
@@ -72,7 +86,7 @@ class BTSWrapper(nn.Module):
             ids_encoder = [0]
             self.renderer.net.encode(images, projs, poses, ids_encoder=ids_encoder, ids_render=ids_encoder)
             all_rays, all_rgb_gt = self.sampler.sample(images * .5 + .5, poses, projs)
-            rendered_depth = self.renderer(all_rays, depth_only=True)
+            rendered_depth = self.renderer(all_rays, bboxes_3d, depth_only=True)
             rendered_depth = rendered_depth.reshape(n, -1, h, w)  # [1,1,192,640]
             rendered_depth = distance_to_z(rendered_depth, projs)
             data["predicted_depth"] = rendered_depth
@@ -149,8 +163,14 @@ def evaluation(local_rank, config):
 
 def get_dataflow(config):
     test_dataset = make_test_dataset(config["data"])
-    test_loader = DataLoader(test_dataset, batch_size=1, num_workers=config["num_workers"], shuffle=False,
-                             drop_last=False)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=1,
+        num_workers=config["num_workers"],
+        shuffle=False,
+        drop_last=False,
+        collate_fn=bbox3d_collate_fn if config["data"].get("return_3d_bboxes", True) else None,
+    )
 
     return test_loader
 

@@ -2,6 +2,7 @@ from typing import NamedTuple
 import numpy as np
 import torch
 from torch import Tensor
+from torch.utils.data import default_collate
 
 from models.common.model.code import PositionalEncoding
 
@@ -106,7 +107,13 @@ def point_in_which_bbox(point: Tensor, bbox: Bbox):
     )
 
 
-def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox], code_xyz: PositionalEncoding):
+def get_density_in_bbox(
+    mlp,
+    feature: Tensor,
+    point: Tensor,
+    bboxes: list[Bbox],
+    code_xyz: PositionalEncoding,
+):
     n, p, cf = feature.shape
     assert point.shape == (n, p, 3)
     assert len(bboxes) == n
@@ -123,20 +130,34 @@ def get_density_in_bbox(mlp, feature: Tensor, point: Tensor, bboxes: list[Bbox],
             point_eatch_batch, bbox
         )  # [NP, 3] [NB, NP]
         mask = mask.any(dim=0) # [NP]
-        density_eatch_batch = mask.to(feature.dtype) * mlp(
-            torch.cat(
-                [
-                    feature_eatch_batch, # [p, cf]
-                    code_xyz(point_in_bbox), # [p, 39]
-                ],
-                dim=-1
-            ),
-            combine_inner_dims =(p,),
-        )[..., 0]  # [NP]
+        density_eatch_batch = (
+            mask.to(feature.dtype)
+            * mlp(
+                torch.cat(
+                    [
+                        feature_eatch_batch, # [p, cf]
+                        code_xyz(point_in_bbox), # [p, 39]
+                    ],
+                    dim=-1,
+                ),
+                combine_inner_dims=(p,),
+            )[..., 0]
+        ) # [NP]
         densities.append(density_eatch_batch)  # [NP]
         masks.append(mask)  # [NP]
 
     return torch.stack(densities, dim=0), torch.stack(masks, dim=0)  # [B, NP] [B, NP]
+
+
+def bbox3d_collate_fn(batch):
+    first_element = batch[0]
+    collated_batch = {}
+    for key in first_element:
+        if key == "3d_bboxes":
+            collated_batch["3d_bboxes"] = [element["3d_bboxes"] for element in batch]
+        else:
+            collated_batch[key] = default_collate([element[key] for element in batch])
+    return collated_batch
 
 
 def draw_3d_bbox(image, vertices_2d, thickness=1):
