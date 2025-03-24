@@ -110,7 +110,7 @@ def render_poses(renderer, ray_sampler, poses, projs, black_invalid=False):
     return frame, depth
 
 
-def render_profile(net, cam_incl_adjust, render_range_dict=None):
+def render_profile(net, cam_incl_adjust, render_range_dict=None, bbox_3d=None):
     # print(render_range_dict)
     if render_range_dict is None:
         q_pts = get_pts(OUT_RES.X_RANGE, OUT_RES.Y_RANGE, OUT_RES.Z_RANGE, OUT_RES.P_RES_ZX[1], OUT_RES.P_RES_Y,
@@ -140,13 +140,13 @@ def render_profile(net, cam_incl_adjust, render_range_dict=None):
             f = i * batch_size
             t = min((i + 1) * batch_size, l)
             q_pts_ = q_pts[:, f:t, :]
-            _, invalid_, sigmas_ = net.forward(q_pts_)
+            _, invalid_, sigmas_, _ = net.forward(q_pts_, bbox_3d)
             sigmas.append(sigmas_)
             invalid.append(invalid_)
         sigmas = torch.cat(sigmas, dim=1)
         invalid = torch.cat(invalid, dim=1)
     else:
-        _, invalid, sigmas = net.forward(q_pts)
+        _, invalid, sigmas = net.forward(q_pts, bbox_3d)
 
     sigmas[torch.any(invalid, dim=-1)] = 1
     alphas = sigmas

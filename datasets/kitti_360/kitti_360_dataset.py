@@ -84,7 +84,7 @@ class Kitti360Dataset(Dataset):
                  return_gt_depth=False,
                  return_samples=False,
                  return_fisheye=True,
-                 return_3d_bboxes=False,
+                 return_3d_bboxes=True,
                  bboxes_semantic_labels=["car",],
                  return_segmentation=False,
                  frame_count=2,

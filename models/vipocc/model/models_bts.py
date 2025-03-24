@@ -43,6 +43,7 @@ class BTSNet(torch.nn.Module):
 
         self.mlp_coarse = make_mlp(conf["mlp_coarse"], d_in, d_out=d_out)  # 103->64->1
         self.mlp_fine = make_mlp(conf["mlp_fine"], d_in, d_out=d_out, allow_empty=True)  # none
+        self.use_fine = conf["mlp_fine"]["type"] in ["resnet", "mlp"]
 
         if self.learn_empty:
             self.empty_feature = nn.Parameter(torch.randn((self.encoder.latent_size,), requires_grad=True))
@@ -229,14 +230,14 @@ class BTSNet(torch.nn.Module):
             mlp_input,
             combine_inner_dims=(n_pts,),
         )  # [16,6250,1]
-        if bboxes_3d:
+        if self.use_fine and bboxes_3d: # whether use fine mlp handling object
             sigma_in_bbox, bbox_mask = get_density_in_bbox(self.mlp_fine, sampled_features, xyz, bboxes_3d, self.code_xyz)
 
         # (n, pts, c) -> (n, n_pts, c)
         mlp_output = mlp_output.reshape(n, n_pts, self._d_out)
 
         sigma = mlp_output[..., 0]
-        if bboxes_3d:
+        if self.use_fine and bboxes_3d:
             sigma_gap = torch.where(bbox_mask, sigma - sigma_in_bbox.detach(), 0.0)[..., None]
             sigma = torch.where(bbox_mask, sigma_in_bbox, sigma)[..., None]
         if self.sample_color:
@@ -262,4 +263,4 @@ class BTSNet(torch.nn.Module):
         else:
             rgb = torch.zeros((n, n_pts, nv * 3), device=sigma.device)
             invalid = invalid_features.to(sigma.dtype)
-        return rgb, invalid, sigma, sigma_gap if bboxes_3d else None # rgb: (B, 6250, 4*3)
+        return rgb, invalid, sigma, sigma_gap if self.use_fine and bboxes_3d else None # rgb: (B, 6250, 4*3)

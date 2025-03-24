@@ -23,6 +23,7 @@ class BTSWrapper(nn.Module):
         super().__init__()
 
         self.renderer = renderer
+        self.eval_teacher = config["eval_teacher"]
 
         self.z_near = config["z_near"]
         self.z_far = config["z_far"]
@@ -65,19 +66,23 @@ class BTSWrapper(nn.Module):
         images = torch.stack(data["imgs"], dim=1)[:, :1]  # n, 1, c, h, w
         poses = torch.stack(data["poses"], dim=1)[:, :1]  # n, 1, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)[:, :1]  # n, 1, 4, 4 (-1, 1)
-        bboxes_3d = [
-            (
-                Bbox(
-                    center=bbox_dict["center"],
-                    whl=bbox_dict["whl"],
-                    rotation=bbox_dict["rotation"],
-                    label=bbox_dict["semanticId"],
+        bboxes_3d = (
+            [
+                (
+                    Bbox(
+                        center=bbox_dict["center"],
+                        whl=bbox_dict["whl"],
+                        rotation=bbox_dict["rotation"],
+                        label=bbox_dict["semanticId"],
+                    )
+                    if bbox_dict
+                    else None
                 )
-                if bbox_dict
-                else None
-            )
-            for bbox_dict in data["3d_bboxes"]
-        ]
+                for bbox_dict in data["3d_bboxes"]
+            ]
+            if self.eval_teacher
+            else None
+        )
 
         if self.eval_rendered_depth:
             n, v, c, h, w = images.shape
@@ -121,6 +126,7 @@ class BTSWrapper(nn.Module):
 
         depth_pred = torch.clamp(depth_pred, 1e-3, 80)
         mask = depth_gt != 0
+        # mask = mask & (depth_gt > 3) & (depth_gt < 80)
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]

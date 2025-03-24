@@ -39,9 +39,11 @@ model_conf:
     d_hidden: 64
 
   mlp_fine:
-    type: "empty"
-    n_blocks: 1
-    d_hidden: 128
+    type: "resnet"
+    n_blocks: 0
+    d_hidden: 64
+
+  eval_teacher: true
 
   z_near: 3
   z_far: 80

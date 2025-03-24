@@ -83,3 +83,6 @@ python eval.py -cn eval_pseudo_depth \
 
 
 
+python eval.py -cn eval_depth_kitti360 "model_conf.mlp_fine.type=empty"
+python eval.py -cn eval_depth_kitti360 "checkpoint=outputs/2025-03-17/14-36-58/kitti_360/best_model_24_abs_rel\=-0.1042.pt" 
+python eval.py -cn eval_depth_kitti360 "checkpoint=outputs/2025-03-17/14-36-58/kitti_360/best_model_24_abs_rel\=-0.1042.pt" "model_conf.eval_teacher=false"
