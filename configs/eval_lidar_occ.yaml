@@ -25,6 +25,8 @@ data:
   is_preprocessed: true
   data_path: "data/KITTI-360"
   pose_path: "data/KITTI-360/data_poses"
+  return_3d_bboxes: true
+  bboxes_semantic_labels: ["car",]
 
 model_conf:
   arch: "BTSNet"
@@ -44,9 +46,11 @@ model_conf:
     d_hidden: 64
 
   mlp_fine:
-    type: "empty"
-    n_blocks: 1
-    d_hidden: 128
+    type: "resnet"
+    n_blocks: 0
+    d_hidden: 64
+
+  eval_teacher: true
 
   z_near: 3
   z_far: 80

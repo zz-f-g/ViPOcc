@@ -254,6 +254,7 @@ class BTSWrapper(nn.Module):
         super().__init__()
 
         self.renderer = renderer
+        self.eval_teacher = config["eval_teacher"]
 
         self.z_near = config["z_near"]
         self.z_far = config["z_far"]
@@ -387,19 +388,23 @@ class BTSWrapper(nn.Module):
         poses = torch.stack(data["poses"], dim=1)  # n, v, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)  # n, v, 4, 4 (-1, 1)
         index = data["index"].item()
-        bboxes_3d = [
-            (
-                Bbox(
-                    center=bbox_dict["center"],
-                    whl=bbox_dict["whl"],
-                    rotation=bbox_dict["rotation"],
-                    label=bbox_dict["semanticId"],
+        bboxes_3d = (
+            [
+                (
+                    Bbox(
+                        center=bbox_dict["center"],
+                        whl=bbox_dict["whl"],
+                        rotation=bbox_dict["rotation"],
+                        label=bbox_dict["semanticId"],
+                    )
+                    if bbox_dict
+                    else None
                 )
-                if bbox_dict
-                else None
-            )
-            for bbox_dict in data["3d_bboxes"]
-        ]
+                for bbox_dict in data["3d_bboxes"]
+            ]
+            if self.eval_teacher
+            else None
+        )
 
         self.count += 1
 
@@ -484,7 +489,7 @@ class BTSWrapper(nn.Module):
         for i_from in range(0, len(q_pts), self.query_batch_size):
             i_to = min(i_from + self.query_batch_size, len(q_pts))
             q_pts_ = q_pts[i_from:i_to]
-            _, _, densities_ = self.renderer.net(q_pts_.unsqueeze(0), bboxes_3d, only_density=False)
+            _, _, densities_, _ = self.renderer.net(q_pts_.unsqueeze(0), bboxes_3d, only_density=False)
             densities.append(densities_.squeeze(0))
         densities = torch.cat(densities, dim=0).squeeze()
         is_occupied_pred = densities > self.occ_threshold

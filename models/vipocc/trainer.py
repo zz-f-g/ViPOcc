@@ -189,7 +189,7 @@ class BTSWrapper(nn.Module):
             else:
                 sampler = self.val_sampler
                 all_rays, _ = sampler.sample(images_ip[:, :1], poses[:, :1], projs[:, :1])
-                rendered_depth = self.renderer(all_rays, depth_only=True).reshape(n, -1, h, w)  # [1,1,192,640]
+                rendered_depth = self.renderer(all_rays, bboxes_3d, depth_only=True).reshape(n, -1, h, w)  # [1,1,192,640]
                 rendered_depth = distance_to_z(rendered_depth, projs[:, :1])
                 data["predicted_depth"] = rendered_depth
             if len(data["depths"]) > 0:
@@ -236,7 +236,7 @@ class BTSWrapper(nn.Module):
             # sampling depth
             all_rays, pred_depth, scaling_ratios = self.depth_sampler.sample(data['predicted_depth'][0], poses[:, :1],
                                                                              projs[:, :1])
-            rendered_depth = self.renderer(all_rays, depth_only=True)
+            rendered_depth = self.renderer(all_rays, bboxes_3d, depth_only=True)
             rendered_depth = self.depth_sampler.reconstruct(rendered_depth)
             rendered_depth *= scaling_ratios
 
