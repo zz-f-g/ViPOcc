@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+from ignite.engine import Engine
 from models.common.model.layers import ssim
 from utils.warp import warp
 
@@ -93,12 +94,13 @@ class ReconstructionLoss:
         self.depth_recon_version = config.get("depth_recon_version", 1)
         self.loss_sigma_weight = config.get("loss_sigma_weight", 0)
         self.loss_gap_weight = config.get("loss_gap_weight", 0)
+        self.loss_gap_start_epoch = config.get("loss_gap_start_epoch", 0)
 
     @staticmethod
     def get_loss_metric_names():
         return ["loss", "loss_rgb_coarse", "loss_rgb_fine", "loss_depth_recon", "loss_temp_align"]
 
-    def __call__(self, data):
+    def __call__(self, data, engine: Engine):
         loss_dict = {}
 
         loss_coarse_all = 0
@@ -271,7 +273,7 @@ class ReconstructionLoss:
 
             loss += loss_temp_align * self.lambda_temporal_alignment
         loss = loss + self.loss_sigma_weight * coarse_0["loss_sigma"]
-        if coarse_0["loss_gap"] is not None:
+        if coarse_0["loss_gap"] is not None and engine.state.epoch >= self.loss_gap_start_epoch:
             loss = loss + self.loss_gap_weight * coarse_0["loss_gap"]
 
         loss_dict["loss_sigma"] = coarse_0["loss_sigma"]

@@ -305,7 +305,7 @@ def create_trainer(model, optimizer, criterion, lr_scheduler, train_sampler, con
         timing["t_forward"] = time.time() - _start_time
 
         _start_time = time.time()
-        loss, loss_metrics = criterion(data)
+        loss, loss_metrics = criterion(data, engine)
         timing["t_loss"] = time.time() - _start_time
 
         _start_time = time.time()
