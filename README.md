@@ -132,3 +132,29 @@ Many thanks to these excellent open-source projects:
 
 
 
+KITTI360 dataset config
+
+| params                    | default         | train           | validation      | eval_depth_kitti360 | eval_lidar_occ  | eval_voxel      | demo            |
+| ---------------           | --------------- | --------------- | --------------- | ---------------     | --------------- | --------------- | --------------- |
+| split_path                |                 | train_files.txt | val_files.txt   | test_files.txt      | test_files.txt  | test_files.txt  |                 |
+| target_image_size         | 192x640         | 192x640         | 192x640         | 192x640             | 192x640         | 192x640         |                 |
+| return_stereo             | F               | T               | T               | T                   | F               | F               |                 |
+| resurn_fisheye            | T               | T               | T               | F                   | F               | F               |                 |
+| return_segmentation       | F               | F               | F               | F                   | F               | F               |                 |
+| return_voxel              | F               | F               | F               | F                   | F               | T               |                 |
+| return_gt_depth           | F               | T               | T               | T                   | F               | F               |                 |
+| return_pseudo_depth       | F               | T               | T               | T                   | F               | F               |                 |
+| return_samples            | F               | F               | F               | F                   | F               | F               |                 |
+| return_3d_bboxes          | F               | T               | T               | T                   | T               | T               |                 |
+| bboxes_semantic_labels    | \[car\]         | \[car\]         | \[car\]         | \[car\]             | \[car\]         | \[car\]         |                 |
+| bbox_all_verts_in_frustum | T               | T               | T               | T                   | T               | T               |                 |
+| frame_count               | 2               | 2               | 2               | 1                   | 1               | 1               |                 |
+| keyframe_offset           | 0               | 0               | 0               | 0                   | 0               | 0               |                 |
+| dilation                  | 1               | 1               | 1               | 1                   | 1               | 1               |                 |
+| fisheye_rotation          | 0               | \[0,-15\]       | \[0,-15\]       | -15                 | -15             | -15             |                 |
+| fisheye_offset            | 0               | 10              | 10              | 10                  | 10              | 10              |                 |
+| color_aug                 | F               | F               | F               | F                   | F               | F               |                 |
+| is_preprocessed           | F               | T               | T               | T                   | T               | T               |                 |
+| variant_fisheye_offset    | F               | F               | F               | F                   | F               | F               |                 |
+| low_fisheye_offset        | None            | F               | None            | None                | None            | None            |                 |
+| up_fisheye_offset         | None            | F               | None            | None                | None            | None            |                 |

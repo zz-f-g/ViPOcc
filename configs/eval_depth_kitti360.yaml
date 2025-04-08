@@ -17,6 +17,8 @@ data:
   return_gt_depth: true
   return_pseudo_depth: true
   is_preprocessed: true
+  return_3d_bboxes: true
+  bboxes_semantic_labels: ["car",]
 
 
 model_conf:
@@ -42,8 +44,6 @@ model_conf:
     type: "resnet"
     n_blocks: 0
     d_hidden: 64
-
-  eval_teacher: true
 
   z_near: 3
   z_far: 80

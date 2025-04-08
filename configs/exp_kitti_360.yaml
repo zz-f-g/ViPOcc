@@ -23,7 +23,7 @@ save_best:
 data:
   data_fc: 2
   image_size: [ 192, 640 ]
-  color_aug: true
+  color_aug: false # color aug is slow
   is_preprocessed: true
   fisheye_rotation: [ 0, -15 ]
   return_gt_depth: true

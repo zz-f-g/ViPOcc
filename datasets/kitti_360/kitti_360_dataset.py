@@ -74,31 +74,32 @@ class FisheyeToPinholeSampler:
 
 
 class Kitti360Dataset(Dataset):
-    def __init__(self,
-                 data_path: str,
-                 pose_path: str,
-                 split_path: Optional[str],
-                 target_image_size=(192, 640),
-                 return_stereo=False,
-                 return_pseudo_depth=False,
-                 return_gt_depth=False,
-                 return_samples=False,
-                 return_fisheye=True,
-                 return_3d_bboxes=True,
-                 bboxes_semantic_labels=["car",],
-                 return_segmentation=False,
-                 frame_count=2,
-                 keyframe_offset=0,
-                 dilation=1,
-                 fisheye_rotation=0,
-                 fisheye_offset=0,
-                 eigen_depth=True,
-                 color_aug=False,
-                 is_preprocessed=False,
-                 variant_fisheye_offset=False,
-                 low_fisheye_offset=None,
-                 up_fisheye_offset=None
-                 ):
+    def __init__(
+        self,
+        data_path: str,
+        pose_path: str,
+        split_path: Optional[str],
+        target_image_size=(192, 640),
+        return_stereo=False,
+        return_fisheye=True,
+        return_segmentation=False,
+        return_gt_depth=False,
+        return_pseudo_depth=False,
+        return_samples=False,
+        return_3d_bboxes=False,
+        bboxes_semantic_labels=["car"],
+        bbox_all_verts_in_frustum=True,
+        frame_count=2,
+        keyframe_offset=0,
+        dilation=1,
+        fisheye_rotation=0,
+        fisheye_offset=0,
+        color_aug=False,
+        is_preprocessed=False,
+        variant_fisheye_offset=False,
+        low_fisheye_offset=None,
+        up_fisheye_offset=None,
+    ):
         self.data_path = data_path
         self.pose_path = pose_path
         self.split_path = split_path
@@ -106,21 +107,20 @@ class Kitti360Dataset(Dataset):
 
         self.return_stereo = return_stereo
         self.return_fisheye = return_fisheye
-        self.return_pseudo_depth = return_pseudo_depth
+        self.return_segmentation = return_segmentation
         self.return_gt_depth = return_gt_depth
+        self.return_pseudo_depth = return_pseudo_depth
+        self.return_samples = return_samples
         self.return_3d_bboxes = return_3d_bboxes
         self.bboxes_semantic_labels = bboxes_semantic_labels
-        self.return_segmentation = return_segmentation
-        self.return_samples = return_samples
+        self.bbox_all_verts_in_frustum = bbox_all_verts_in_frustum
 
         self.frame_count = frame_count
+        self.keyframe_offset = keyframe_offset
         self.dilation = dilation
         self.fisheye_rotation = fisheye_rotation
         self.fisheye_offset = fisheye_offset
-        self.keyframe_offset = keyframe_offset
-        self.eigen_depth = eigen_depth
-        # self.color_aug = color_aug
-        self.color_aug = False
+        self.color_aug = color_aug
         self.is_preprocessed = is_preprocessed
         # if true, sample fisheye cameras within the lower and uppper bound
         self.variant_fisheye_offset = variant_fisheye_offset
@@ -536,7 +536,7 @@ class Kitti360Dataset(Dataset):
             verts = (projs @ (pose_w2c[:3, :3] @ verts.T + pose_w2c[:3, 3, None])).T
             verts[:, :2] /= verts[:, 2:3]
             valid = ((verts[:, 0] >= -1) & (verts[:, 0] <= 1)) & ((verts[:, 1] >= -1) & (verts[:, 1] <= 1)) & ((verts[:, 2] > 3) & (verts[:, 2] <= 80))
-            valid = np.any(valid, axis=-1)
+            valid = np.all(valid, axis=-1) if self.bbox_all_verts_in_frustum else np.any(valid, axis=-1)
             return valid
 
         transform_w2c = lambda verts: (
@@ -783,17 +783,17 @@ class Kitti360Dataset(Dataset):
         else:
             samples = []
 
-        bboxes_3d = {}
-        if self.return_3d_bboxes:
-            bboxes_3d.update(self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0]))
-        if bboxes_3d:
-            bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
-
         if self.return_segmentation:
             segs = [self.load_segmentation(sequence, img_ids[0])]
         else:
             segs = []
 
+        if self.return_3d_bboxes:
+            bboxes_3d_raw = self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0])
+            bboxes_3d = {}
+            if bboxes_3d_raw: # whether 3dbbox exists in this camera view
+                bboxes_3d = convert_vertices(bboxes_3d_raw["vertices"])
+                bboxes_3d.update({"semanticId": bboxes_3d_raw["semanticId"]})
         _proc_time = np.array(time.time() - _start_time)
 
         # print(f"_loading_time:      {_loading_time:.5f}")
@@ -809,7 +809,6 @@ class Kitti360Dataset(Dataset):
             "pseudo_depth": pseudo_depth,
             "samples": samples,
             "ts": ids,
-            "3d_bboxes": bboxes_3d,
             "segs": segs,
             "t__get_item__": np.array([_proc_time]),
             "index": np.array([index]),
@@ -817,6 +816,8 @@ class Kitti360Dataset(Dataset):
             "seq": sequence,
             "img_id": img_ids[0]
         }
+        if self.return_3d_bboxes: # empty dict if no 3dbbox exists in this camera view
+            data.update({"3d_bboxes": bboxes_3d})
         return data
 
     def __len__(self) -> int:

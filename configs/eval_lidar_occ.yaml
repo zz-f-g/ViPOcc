@@ -50,8 +50,6 @@ model_conf:
     n_blocks: 0
     d_hidden: 64
 
-  eval_teacher: true
-
   z_near: 3
   z_far: 80
 

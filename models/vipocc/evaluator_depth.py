@@ -23,7 +23,6 @@ class BTSWrapper(nn.Module):
         super().__init__()
 
         self.renderer = renderer
-        self.eval_teacher = config["eval_teacher"]
 
         self.z_near = config["z_near"]
         self.z_far = config["z_far"]
@@ -76,12 +75,12 @@ class BTSWrapper(nn.Module):
                         label=bbox_dict["semanticId"],
                     )
                     if bbox_dict
-                    else None
+                    else None # no 3d bboxes in this batch
                 )
                 for bbox_dict in data["3d_bboxes"]
-            ]
-            if self.eval_teacher
-            else None
+            ] # eval w/ 3d bboxes, eval student or teacher
+            if "3d_bboxes" in data
+            else None # eval w/o 3d bboxes, eval student
         )
 
         if self.eval_rendered_depth:
