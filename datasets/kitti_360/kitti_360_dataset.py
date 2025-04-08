@@ -15,6 +15,8 @@ from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 from torchvision.transforms import ColorJitter
 
+from datasets.kitti_360.sscbench import load_sscbench
+from datasets.kitti_360.voxel import vis_voxel, read_calib
 from datasets.kitti_360.annotation import KITTI360Bbox3D
 from datasets.kitti_360.labels import id2label
 from datasets.kitti_360.process_bbox3d import convert_vertices
@@ -83,6 +85,7 @@ class Kitti360Dataset(Dataset):
         return_stereo=False,
         return_fisheye=True,
         return_segmentation=False,
+        return_voxel=False,
         return_gt_depth=False,
         return_pseudo_depth=False,
         return_samples=False,
@@ -108,9 +111,12 @@ class Kitti360Dataset(Dataset):
         self.return_stereo = return_stereo
         self.return_fisheye = return_fisheye
         self.return_segmentation = return_segmentation
+        self.return_voxel = return_voxel
         self.return_gt_depth = return_gt_depth
+
         self.return_pseudo_depth = return_pseudo_depth
         self.return_samples = return_samples
+
         self.return_3d_bboxes = return_3d_bboxes
         self.bboxes_semantic_labels = bboxes_semantic_labels
         self.bbox_all_verts_in_frustum = bbox_all_verts_in_frustum
@@ -160,6 +166,15 @@ class Kitti360Dataset(Dataset):
         if self.return_segmentation:
             # Segmentations are only provided for the left camera
             self._datapoints = [dp for dp in self._datapoints if not dp[2]]
+
+        if self.return_voxel:
+            self.ssc_root_path = Path(self.data_path) / ".." / "sscbench-kitti360"
+            assert self.ssc_root_path.exists()
+            self.id_w_voxel_for_test, self.id_test, self.kitti360id2sscid = load_sscbench(
+                self.ssc_root_path / "kitti_360_match.txt",
+                self._datapoints,
+                self._img_ids,
+            )
 
         self._skip = 0
         self.length = len(self._datapoints)
@@ -794,6 +809,21 @@ class Kitti360Dataset(Dataset):
             if bboxes_3d_raw: # whether 3dbbox exists in this camera view
                 bboxes_3d = convert_vertices(bboxes_3d_raw["vertices"])
                 bboxes_3d.update({"semanticId": bboxes_3d_raw["semanticId"]})
+
+        if self.return_voxel:
+            id_test_img = self.get_img_id_from_id(sequence, id)
+            id_voxel = self.id_w_voxel_for_test[sequence][np.where(self.id_test[sequence] == id_test_img)[0][0]]
+            id_in_sscbench = self.kitti360id2sscid[sequence][id_voxel]
+            voxel_file_path = self.ssc_root_path / "preprocess" / "labels" / sequence / f"{id_in_sscbench:0>6}_1_1.npy"
+            inv_file_path = self.ssc_root_path / "data_2d_raw" / sequence / "voxels" / f"{id_in_sscbench:0>6}.invalid"
+            voxel = np.load(voxel_file_path).astype(np.int32)
+
+            id_voxel_for_pose = np.where(self._img_ids[sequence] == id_voxel)[0][0]
+            c2w = self._poses[sequence][id, :, :] @ self._calibs["T_cam_to_pose"]["01" if is_right else "00"]
+            voxelcam2w = self._poses[sequence][id_voxel_for_pose, :, :] @ self._calibs["T_cam_to_pose"]["00"]
+            voxellidar2voxelcam = read_calib()["velo2cam"]
+            voxellidar2c = (np.linalg.inv(c2w) @ voxelcam2w @ voxellidar2voxelcam).astype(np.float32)
+
         _proc_time = np.array(time.time() - _start_time)
 
         # print(f"_loading_time:      {_loading_time:.5f}")
@@ -818,6 +848,14 @@ class Kitti360Dataset(Dataset):
         }
         if self.return_3d_bboxes: # empty dict if no 3dbbox exists in this camera view
             data.update({"3d_bboxes": bboxes_3d})
+        if self.return_voxel:
+            data.update(
+                {
+                    "voxellidar2c": voxellidar2c,
+                    "voxel": voxel,
+                    "voxel_file_path": voxel_file_path.as_posix(),
+                }
+            )
         return data
 
     def __len__(self) -> int:

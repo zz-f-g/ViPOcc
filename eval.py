@@ -7,6 +7,7 @@ from models.vipocc.evaluator_depth import evaluation as eval_depth
 from models.vipocc.evaluator_occ import evaluation as eval_occ
 from models.vipocc.evaluator_pseudo_depth import evaluation as eval_pseudo_depth
 from models.vipocc.evaluator_demo import evaluation as demo
+from models.vipocc.evaluator_voxel import evaluation as eval_voxel
 
 @hydra.main(version_base=None, config_path="configs")
 def main(config: DictConfig):

@@ -118,6 +118,7 @@ def make_test_dataset(config):
             return_3d_bboxes=config.get("return_3d_bboxes", False),
             bboxes_semantic_labels=config.get("bboxes_semantic_labels", []),
             return_segmentation=config.get("data_segmentation", False),
+            return_voxel=config.get("return_voxel", False),
             keyframe_offset=0,
             fisheye_rotation=config.get("fisheye_rotation", 0),
             fisheye_offset=config.get("fisheye_offset", 1),
