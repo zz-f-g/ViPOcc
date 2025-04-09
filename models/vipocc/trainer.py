@@ -34,6 +34,7 @@ class BTSWrapper(nn.Module):
 
         self.z_near = config["z_near"]  # 3
         self.z_far = config["z_far"]  # 80
+        self.eval_w_dist_range = config["eval_w_dist_range"]
         self.ray_batch_size = config["ray_batch_size"]  # 4096
         frames_render = config.get("n_frames_render", 2)  # 2
         self.frame_sample_mode = config.get("frame_sample_mode", "default")
@@ -262,6 +263,10 @@ class BTSWrapper(nn.Module):
         depth_pred = F.interpolate(depth_pred, depth_gt.shape[-2:])
         depth_pred = torch.clamp(depth_pred, 1e-3, 80)
         mask = depth_gt != 0
+        if self.eval_w_dist_range:
+            projs = torch.stack(data["projs"], dim=1)[:, :1]
+            dist_gt = distance_to_z(depth_gt, projs, inverse=True)
+            mask = ((dist_gt > self.z_near) & (dist_gt < self.z_far))
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]

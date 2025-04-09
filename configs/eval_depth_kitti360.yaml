@@ -47,6 +47,7 @@ model_conf:
 
   z_near: 3
   z_far: 80
+  eval_w_dist_range: true
   ray_batch_size: 256
   code_mode: z
   inv_z: true

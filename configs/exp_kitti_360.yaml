@@ -58,6 +58,8 @@ model_conf:
 
   z_near: 3
   z_far: 80
+  # only eval gt depth in distance range [z_near, z_far]
+  eval_w_dist_range: true
   inv_z: true
 
   n_frames_encoder: 1

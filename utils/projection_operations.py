@@ -1,7 +1,7 @@
 import torch
 
 
-def distance_to_z(depths: torch.Tensor, projs: torch.Tensor):
+def distance_to_z(depths: torch.Tensor, projs: torch.Tensor, inverse: bool = False):
     n, nv, h, w = depths.shape
     device = depths.device
 
@@ -13,4 +13,4 @@ def distance_to_z(depths: torch.Tensor, projs: torch.Tensor):
     cam_points = (inv_K @ img_points.view(n, nv, 3, -1)).view(n, nv, 3, h, w)
     factors = cam_points[:, :, 2, :, :] / torch.norm(cam_points, dim=2)
 
-    return depths * factors
+    return depths / factors if inverse else depths * factors
