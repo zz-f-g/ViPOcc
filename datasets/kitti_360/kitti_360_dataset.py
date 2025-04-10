@@ -16,7 +16,7 @@ from torch.utils.data import Dataset
 from torchvision.transforms import ColorJitter
 
 from datasets.kitti_360.sscbench import load_sscbench
-from datasets.kitti_360.voxel import vis_voxel, read_calib
+from datasets.kitti_360.voxel import read_calib
 from datasets.kitti_360.annotation import KITTI360Bbox3D
 from datasets.kitti_360.labels import id2label
 from datasets.kitti_360.process_bbox3d import convert_vertices

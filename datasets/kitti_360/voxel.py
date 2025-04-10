@@ -7,6 +7,11 @@ from numpy.typing import NDArray
 import open3d as o3d
 from mayavi import mlab
 
+from utils.bbox import Bbox
+from datasets.kitti_360.process_bbox3d import EDGES
+
+EDGE_LINES = [list(edge) for group in EDGES.values() for edge in group]
+
 VOXEL_ORIGIN = np.array([0, -25.6, -2])
 VOXEL_SIZE = 0.2
 VOXEL_RESOLUTION = (256, 256, 32)
@@ -91,66 +96,6 @@ def project_voxel(
     return points_proj, z, frustum_mask
 
 
-def voxel2pc(
-    voxel: NDArray[np.uint8],
-    learning_map_inv: NDArray[np.uint8],
-    color_map: NDArray[np.uint8],
-    frustum_mask: NDArray[np.bool_] | None,
-):
-    if frustum_mask is not None:
-        points_in_frustum = np.where((voxel != 255) & (voxel != 0) & frustum_mask)
-        points_out_frustum = np.where((voxel != 255) & (voxel != 0) & ~frustum_mask)
-        return (
-            np.concatenate(
-                (
-                    np.stack(points_in_frustum, axis=-1),
-                    np.stack(points_out_frustum, axis=-1),
-                ),
-                axis=0,
-            ),
-            np.concatenate(
-                (
-                    color_map[learning_map_inv[voxel[points_in_frustum]]] / 255.0,
-                    color_map[learning_map_inv[voxel[points_out_frustum]]] / 255.0 / 2,
-                ),
-                axis=0,
-            ),
-            (voxel == 255),
-        )
-    else:
-        points = np.where((voxel != 255) & (voxel != 0))
-        return (
-            np.stack(points, axis=-1),
-            color_map[learning_map_inv[voxel[points]]] / 255.0,
-            (voxel == 255),
-        )
-
-
-def vis_voxel(voxel: NDArray[int], frustum_mask: NDArray[bool] | None = None):
-    calib_info = read_calib()
-    if frustum_mask is None:
-        _points_proj, _z, frustum_mask = project_voxel(
-            calib_info["intrinsic"], calib_info["velo2cam"], 376, 1408
-        )
-    with open("datasets/kitti_360/sscbench-kitti360.yaml", "r") as f:
-        kitti360 = yaml.safe_load((f))
-    learning_map_inv = np.zeros((19,), dtype=np.uint8)
-    for label in kitti360["learning_map_inv"]:
-        learning_map_inv[label] = kitti360["learning_map_inv"][label]
-    color_map = np.zeros((260, 3), dtype=np.uint8)
-    for label in kitti360["color_map"]:
-        color_map[label] = np.array(kitti360["color_map"][label], dtype=np.uint8)
-
-    # points, colors, _invalid = voxel2pc(voxel, learning_map_inv, color_map, frustum_mask)
-    points, colors, _invalid = voxel2pc(voxel, learning_map_inv, color_map)
-
-    # 可视化点云
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(np.flip(colors, axis=-1))  # bgr -> rgb
-    o3d.visualization.draw_geometries([pcd])
-
-
 def vis_voxel_grid(non_empty_indices: NDArray[int], semantic_values: NDArray[int] | None = None):
     with open("datasets/kitti_360/sscbench-kitti360.yaml", "r") as f:
         kitti360 = yaml.safe_load((f))
@@ -198,6 +143,51 @@ def vis_voxel_grid(non_empty_indices: NDArray[int], semantic_values: NDArray[int
     # scene.render()
     mlab.show()
 
+def vis_voxel_bbox(non_empty_indices: NDArray[np.uint32], semantic_values: NDArray[np.uint32] | None = None, bboxes_verts: NDArray[np.float32] | None = None):
+    with open("datasets/kitti_360/sscbench-kitti360.yaml", "r") as f:
+        kitti360 = yaml.safe_load((f))
+    learning_map_inv = np.zeros((19,), dtype=np.uint8)
+    for label in kitti360["learning_map_inv"]:
+        learning_map_inv[label] = kitti360["learning_map_inv"][label]
+    color_map = np.zeros((260, 3), dtype=np.uint8)
+    for label in kitti360["color_map"]:
+        color_map[label] = np.array(kitti360["color_map"][label], dtype=np.uint8)
+    color_lut = np.concatenate(
+        (
+            np.flip(color_map[learning_map_inv], axis=-1), # bgr -> rgb
+            np.full((learning_map_inv.shape[0], 1), 255),
+        ),
+        axis=1,
+    ) / 255.0
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(non_empty_indices)
+    pcd.colors = o3d.utility.Vector3dVector(
+        color_lut[:, :3][
+            (
+                np.ones_like(non_empty_indices[..., 0], dtype=np.uint8)
+                if semantic_values is None
+                else semantic_values
+            )
+        ]
+    )
+    voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size=1.0)
+
+    def create_wireframe_box(vertices, color=[1, 0, 0]):
+        line_colors = [color for _ in EDGE_LINES]
+        line_set = o3d.geometry.LineSet(
+            points=o3d.utility.Vector3dVector(vertices),
+            lines=o3d.utility.Vector2iVector(EDGE_LINES),
+        )
+        line_set.colors = o3d.utility.Vector3dVector(line_colors)
+        return line_set
+    coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=5.0, origin=[0, 0, 0])
+    o3d.visualization.draw_geometries(
+        [voxel_grid, coord_frame]
+        if bboxes_verts is None
+        else [voxel_grid, coord_frame]
+        + [create_wireframe_box(verts) for verts in bboxes_verts]
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="read in seq & idx")

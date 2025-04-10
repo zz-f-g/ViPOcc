@@ -1,6 +1,5 @@
 [tool.basedpyright]
 typeCheckingMode = "off"
-inlay_hint = true
 "exclude" = [
     "data",
     "out",

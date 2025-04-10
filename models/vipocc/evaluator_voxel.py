@@ -19,8 +19,7 @@ from datasets.kitti_360.voxel import (
     VOXEL_ORIGIN,
     VOXEL_SIZE,
     VOXEL_RESOLUTION,
-    vis_voxel_grid,
-    project_voxel,
+    vis_voxel_bbox,
 )
 
 EPS = 1e-4
@@ -214,13 +213,30 @@ class BTSWrapper(nn.Module):
         is_occupied = (voxel != 0) & (voxel != 255)
 
         # for visualization
+        # bboxes_verts_in_cam = [bboxes_each_batch["vertices"] for bboxes_each_batch in data["3d_bboxes"]]
+        # bboxes_verts_in_voxellidar = [
+        #     (
+        #         torch.cat([verts, verts.new_ones((verts.shape[0], 8, 1))], dim=-1).view(
+        #             -1, 4
+        #         )
+        #         @ torch.inverse(voxellidar2c).T
+        #     )[..., :3].view(verts.shape[0], 8, 3)
+        #     for verts, voxellidar2c in zip(bboxes_verts_in_cam, data["voxellidar2c"])
+        # ]
+        # bboxes_verts_in_voxel = [
+        #     (verts - torch.tensor(VOXEL_ORIGIN, device=verts.device)) / VOXEL_SIZE
+        #     - torch.tensor([0.5, 0.5, 0.5], device=verts.device)
+        #     for verts in bboxes_verts_in_voxellidar
+        # ]
         # vox = voxel[0].cpu().numpy()
         # vox = np.where((vox == 0) | (~in_frustum.cpu().numpy()[0]), 255, vox)
         # non_empty_indices = np.stack(np.where(vox != 255), axis=0).T
         # semantic_values = vox[vox != 255]
         # vox_pred = is_occupied_pred[0].long().cpu().detach().numpy()
         # non_empty_indices_pred = np.stack(np.where((vox_pred != 0) & in_frustum.cpu().numpy()[0])).T
-        # vis_voxel_grid(non_empty_indices, semantic_values)
+        # __import__('ipdb').set_trace()
+        # vis_voxel_bbox(non_empty_indices, semantic_values, bboxes_verts_in_voxel[0].cpu().numpy())
+        # vis_voxel_bbox(non_empty_indices_pred, None, bboxes_verts_in_voxel[0].cpu().numpy())
 
         # o_acc, ie_acc, ie_rec = compute_occ_scores(is_occupied_pred, voxel, None, (voxel != 255))
         data["O_acc"] = 0
