@@ -815,7 +815,7 @@ class Kitti360Dataset(Dataset):
             id_voxel = self.id_w_voxel_for_test[sequence][np.where(self.id_test[sequence] == id_test_img)[0][0]]
             id_in_sscbench = self.kitti360id2sscid[sequence][id_voxel]
             voxel_file_path = self.ssc_root_path / "preprocess" / "labels" / sequence / f"{id_in_sscbench:0>6}_1_1.npy"
-            inv_file_path = self.ssc_root_path / "data_2d_raw" / sequence / "voxels" / f"{id_in_sscbench:0>6}.invalid"
+            # inv_file_path = self.ssc_root_path / "data_2d_raw" / sequence / "voxels" / f"{id_in_sscbench:0>6}.invalid"
             voxel = np.load(voxel_file_path).astype(np.int32)
 
             id_voxel_for_pose = np.where(self._img_ids[sequence] == id_voxel)[0][0]
