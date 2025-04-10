@@ -804,11 +804,9 @@ class Kitti360Dataset(Dataset):
             segs = []
 
         if self.return_3d_bboxes:
-            bboxes_3d_raw = self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0])
-            bboxes_3d = {}
-            if bboxes_3d_raw: # whether 3dbbox exists in this camera view
-                bboxes_3d = convert_vertices(bboxes_3d_raw["vertices"])
-                bboxes_3d.update({"semanticId": bboxes_3d_raw["semanticId"]})
+            bboxes_3d = self.get_3d_bboxes(sequence, img_ids[0], poses[0], projs[0])
+            if bboxes_3d: # whether 3dbbox exists in this camera view
+                bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
 
         if self.return_voxel:
             id_test_img = self.get_img_id_from_id(sequence, id)
