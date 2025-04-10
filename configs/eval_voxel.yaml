@@ -54,28 +54,6 @@ model_conf:
   z_near: 3
   z_far: 80
 
-  # scene-level evaluation settings
-  x_range: [ -4, 4 ]
-  y_range: [ 0, .75 ]
-  #    z_range: [50, 4]
-  z_range: [ 20, 4 ]
-  ppm: 10
-  ppm_y: 4
-  y_res: 1
-  gt_aggregate_timesteps: 300
-  cut_far_invisible_area: true
-  save_gt_occ_map_path: ""
-  save_pred_gt_img: False
-  save_dir: ${checkpoint}
-
-  read_gt_occ_path: "data/KITTI-360/GT_Occ"
-  # object-level evaluation settings
-  is_eval_object: true
-  read_gt_obj_path: "data/KITTI-360/Object_Label"
-  obj_z_expand: 2
-  obj_x_expand: 0.5
-
-
   ray_batch_size: 256
   code_mode: z
   inv_z: true
