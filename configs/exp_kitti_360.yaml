@@ -74,6 +74,15 @@ model_conf:
 
   learn_empty: false
   code_mode: z
+  depth_adaption:
+    enable: false
+    kernel_size: 3
+    adaption_in_far: true
+    feature_fusion: mlp # [mean, mlp]
+    mlp_adaptive:
+      type: "resnet"
+      n_blocks: 0
+      d_hidden: 3
 
 loss:
   criterion: "l1+ssim"
