@@ -45,6 +45,21 @@ class BTSNet(torch.nn.Module):
         self.mlp_fine = make_mlp(conf["mlp_fine"], d_in, d_out=d_out, allow_empty=True)  # none
         self.use_fine = conf["mlp_fine"]["type"] in ["resnet", "mlp"]
 
+        self.use_depth_adaption = conf["depth_adaption"]["enable"]
+        self.da_kernel_size = conf["depth_adaption"]["kernel_size"]
+        assert isinstance(self.da_kernel_size, int) and self.da_kernel_size % 2 == 1
+        self.da_in_far = conf["depth_adaption"]["adaption_in_far"]
+        assert conf["depth_adaption"]["feature_fusion"] in ["mean", "mlp"]
+        self.da_mlp = (
+            make_mlp(
+                conf["depth_adaption"]["mlp_adaptive"],
+                self.da_kernel_size**2,
+                d_out=1,
+            )
+            if conf["depth_adaption"]["feature_fusion"] == "mlp"
+            else None
+        )
+
         if self.learn_empty:
             self.empty_feature = nn.Parameter(torch.randn((self.encoder.latent_size,), requires_grad=True))
 
@@ -155,9 +170,55 @@ class BTSNet(torch.nn.Module):
         if self.learn_empty:
             empty_feature_expanded = self.empty_feature.view(1, 1, 1, c).expand(n, nv, n_pts, c)
 
-        sampled_features = F.grid_sample(feature_map.view(n * nv, c, h, w), xy.view(n * nv, 1, -1, 2), mode="bilinear",
-                                         padding_mode="border", align_corners=False).view(n, nv, c, n_pts).permute(0, 1,
-                                                                                                                   3, 2)
+        sampled_features = (
+            F.grid_sample(
+                feature_map.view(n * nv, c, h, w),
+                xy.view(n * nv, 1, -1, 2),
+                mode="bilinear",
+                padding_mode="border",
+                align_corners=False,
+            )
+            .view(n, nv, c, n_pts)
+            .permute(0, 1, 3, 2)
+        )
+
+        if self.use_depth_adaption:
+            pad_size = self.da_kernel_size // 2
+            features_unfold = (
+                F.unfold(
+                    F.pad(
+                        feature_map.view(n * nv, c, h, w),
+                        [pad_size, pad_size, pad_size, pad_size],
+                        mode="replicate",
+                    ),
+                    self.da_kernel_size,
+                )
+                .view(n * nv, c, self.da_kernel_size**2, h, w)
+            )
+            if self.da_mlp is None:
+                features_adaption = features_unfold.mean(dim=2)
+            elif isinstance(self.da_mlp, nn.Module):
+                features_adaption = self.da_mlp(features_unfold.permute(0, 1, 3, 4, 2)).mean(dim=-1)
+            sampled_features_adaption = (
+                F.grid_sample(
+                    features_adaption,
+                    xy.view(n * nv, 1, -1, 2),
+                    mode="bilinear",
+                    padding_mode="border",
+                    align_corners=False,
+                )
+                .view(n, nv, c, n_pts)
+                .permute(0, 1, 3, 2)
+            )
+            if self.code_mode == "z":
+                adaption_factor = z * 0.5 + 0.5
+            elif self.code_mode == "distance":
+                adaption_factor = distance * 0.5 + 0.5
+            sampled_features = (
+                sampled_features * (1 - z) + sampled_features_adaption * z
+                if self.da_in_far
+                else sampled_features * z + sampled_features_adaption * (1 - z)
+            )
 
         if self.learn_empty:
             sampled_features[invalid.expand(-1, -1, -1, c)] = empty_feature_expanded[invalid.expand(-1, -1, -1, c)]
