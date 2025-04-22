@@ -189,6 +189,51 @@ def vis_voxel_bbox(non_empty_indices: NDArray[np.uint32], semantic_values: NDArr
         + [create_wireframe_box(verts) for verts in bboxes_verts]
     )
 
+
+def prepare_voxel(
+    projs: NDArray[np.float32],
+    voxellidar2c: NDArray[np.float32],
+    voxel: NDArray[np.int32],
+    vertices: NDArray[np.float32] | None,
+):
+    X, Y, Z = VOXEL_RESOLUTION
+    vox_coords = np.stack(
+        np.meshgrid(np.arange(X), np.arange(Y), np.arange(Z), indexing="ij"),
+        axis=0,
+    ).reshape(3, -1)
+    points_velo = (
+        (vox_coords + 0.5) * VOXEL_SIZE + np.array(VOXEL_ORIGIN).reshape(3, 1)
+    ).astype(np.float32)
+    points_cam = voxellidar2c @ np.concatenate(
+        [points_velo, np.ones_like(points_velo[:1, ...])],
+        axis=0,
+    )
+    points_projected = projs @ points_cam[:3, :]
+    points_uv = (points_projected[:2] / points_projected[2:]).transpose()
+    in_frustum = (
+        (points_uv > np.array([-1, -1])).all(-1)
+        & (points_uv < np.array([1, 1])).all(-1)
+        & (points_projected[2] > 1e-3)
+    ).reshape(*VOXEL_RESOLUTION)
+    vox = np.where((voxel == 0) | (~in_frustum), 255, voxel)
+    non_empty_indices = np.stack(np.where(vox != 255), axis=0).T
+    semantic_values = vox[vox != 255]
+    if vertices is None:
+        return non_empty_indices, semantic_values, None
+    else:
+        bboxes_verts_in_voxellidar = (
+            np.concatenate(
+                [vertices, np.ones(vertices[..., :1].shape)],
+                axis=-1,
+            ).reshape(-1, 4)
+            @ np.linalg.inv(voxellidar2c).T
+        )[..., :3].reshape(vertices.shape)
+
+        bboxes_verts_in_voxel = (
+            bboxes_verts_in_voxellidar - VOXEL_ORIGIN
+        ) / VOXEL_SIZE - 0.5
+        return non_empty_indices, semantic_values, bboxes_verts_in_voxel
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="read in seq & idx")
     parser.add_argument("seq", type=int, help="seq {0:11} \ {01, 08}")
