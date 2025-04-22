@@ -7,7 +7,7 @@ def load_match_file(file_path: Path):
     assert file_path.exists()
     with open(file_path, "r") as f:
         match_raw = f.readlines()
-    match_info: dict[str: list[int]] = {}
+    match_info: dict[str, list[int]] = {}
     for line in match_raw:
         seq, kitti360_filename, sscbench_filename = line.split(" ")
         if seq not in match_info:
