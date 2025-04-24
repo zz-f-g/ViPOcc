@@ -178,7 +178,7 @@ class BTSWrapper(nn.Module):
 
         # compute voxel centers coordinates in cam system
         q_pts = (
-            (data["voxellidar2c"] @ self.points_velo_h.expand(n, -1, -1))[:, :3, :]
+            (data["voxellidar2c"] @ self.points_velo_h[None, ...].expand(n, -1, -1))[:, :3, :]
             .permute(0, 2, 1)
             .reshape(-1, 3)
         )
