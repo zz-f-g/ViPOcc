@@ -176,10 +176,10 @@ class NeRFRenderer(torch.nn.Module):
         sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
         bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
 
-        sigmas_valid = torch.where(torch.all(invalid, dim=-1), 0.0, sigmas).view(-1)
-        sigmas_sharpened = F.softmax(sigmas_valid) * sigmas_valid.sum().detach()
+        sigmas_valid = torch.where(torch.all(invalid, dim=-1), 0.0, sigmas)
+        sigmas_sharpened = (F.softmax(sigmas_valid, dim=-1) * torch.sum(sigmas_valid, dim=-1, keepdim=True))
         sigmas_sharpened = sigmas_sharpened - sigmas_sharpened.min()
-        loss_sigma = ((sigmas_valid - sigmas_sharpened)**2).mean()
+        loss_sigma = ((sigmas_valid - sigmas_sharpened.detach())**2).mean()
 
         if self.training and self.noise_std > 0.0:
             sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
