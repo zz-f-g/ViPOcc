@@ -34,17 +34,11 @@ def read_calib():
     ).reshape(3, 4)
     return {
         "intrinsic": P,
-        "velo2cam": np.concatenate(
-            [
-                np.linalg.inv(
-                    np.concatenate(
-                        [cam2velo, np.array([0, 0, 0, 1]).reshape(1, 4)],
-                        axis=0,
-                    )
-                )[:3, :4],
-                np.array([0, 0, 0, 1]).reshape(1, 4),
-            ],
-            axis=0,
+        "velo2cam": np.linalg.inv(
+            np.concatenate(
+                [cam2velo, np.array([0, 0, 0, 1]).reshape(1, 4)],
+                axis=0,
+            )
         ),
     }
 
