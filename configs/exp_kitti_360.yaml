@@ -101,3 +101,4 @@ renderer:
   white_bkgd: false
   lindisp: true
   hard_alpha_cap: true
+  depth_align_teacher: true

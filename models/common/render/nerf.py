@@ -77,7 +77,8 @@ class NeRFRenderer(torch.nn.Module):
             white_bkgd=False,
             lindisp=False,
             sched=None,  # ray sampling schedule for coarse and fine rays
-            hard_alpha_cap=False
+            hard_alpha_cap=False,
+            depth_align_teacher=False,
     ):
         super().__init__()
         self.n_coarse = n_coarse
@@ -101,6 +102,7 @@ class NeRFRenderer(torch.nn.Module):
             "last_sched", torch.tensor(0, dtype=torch.long), persistent=True
         )
         self.hard_alpha_cap = hard_alpha_cap
+        self.depth_align_teacher = depth_align_teacher
 
         # self.sampler = ray_samplers.LinearDisparitySampler(num_samples=n_coarse)
 
@@ -263,9 +265,14 @@ class NeRFRenderer(torch.nn.Module):
         sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
         bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
 
-        alphas = 1 - torch.exp(
-            -deltas.abs() * torch.relu(torch.where(bbox_mask, sigmas_in_bbox, sigmas))
-        )  # (B, 64) (delta should be positive anyway)
+        if self.depth_align_teacher:
+            alphas = 1 - torch.exp(
+                -deltas.abs() * torch.relu(torch.where(bbox_mask, sigmas_in_bbox, sigmas))
+            )  # (B, 64) (delta should be positive anyway)
+        else:
+            alphas = 1 - torch.exp(
+                -deltas.abs() * torch.relu(sigmas)
+            )  # (B, 64) (delta should be positive anyway)
 
         if self.hard_alpha_cap:
             alphas[:, -1] = 1
@@ -380,7 +387,8 @@ class NeRFRenderer(torch.nn.Module):
             lindisp=conf.get("lindisp", True),
             eval_batch_size=conf.get("eval_batch_size", eval_batch_size),
             sched=conf.get("sched", None),
-            hard_alpha_cap=conf.get("hard_alpha_cap", False)
+            hard_alpha_cap=conf.get("hard_alpha_cap", False),
+            depth_align_teacher=conf.get("depth_align_teacher", False),
         )
 
     def bind_parallel(self, net, gpus=None, simple_output=False):
