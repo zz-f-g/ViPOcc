@@ -241,7 +241,7 @@ class NeRFRenderer(torch.nn.Module):
         # points = z_samp.frustums.get_positions()
         points = points.reshape(-1, 3)  # (B*K, 3)
 
-        sigmas_all = []
+        sigmas_all, sigmas_in_bbox_all, bbox_mask_all = [], [], []
         if sb > 0:  # superbatch, 16
             points = points.reshape(sb, -1, 3)  # (SB, B'*K, 3) B' is real ray batch size
             eval_batch_size = (self.eval_batch_size - 1) // sb + 1
@@ -253,14 +253,19 @@ class NeRFRenderer(torch.nn.Module):
         split_points = torch.split(points, eval_batch_size, dim=eval_batch_dim)
 
         for pnts in split_points:
-            rgbs, invalid, sigmas, _, _ = model(pnts, bboxes_3d, coarse=coarse)
+            _, _, sigmas, sigmas_in_bbox, bbox_mask = model(pnts, bboxes_3d, coarse=coarse) # TODO: how to render in invalid region
             sigmas_all.append(sigmas)
+            sigmas_in_bbox_all.append(sigmas_in_bbox)
+            bbox_mask_all.append(bbox_mask)
 
         # (B*K, 4) OR (SB, B'*K, 4)
-        sigmas = torch.cat(sigmas_all, dim=eval_batch_dim)
+        sigmas = torch.cat(sigmas_all, dim=eval_batch_dim).reshape(B, K)
+        sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
+        bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
 
-        sigmas = sigmas.reshape(B, K)
-        alphas = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas))  # (B, 64) (delta should be positive anyway)
+        alphas = 1 - torch.exp(
+            -deltas.abs() * torch.relu(torch.where(bbox_mask, sigmas_in_bbox, sigmas))
+        )  # (B, 64) (delta should be positive anyway)
 
         if self.hard_alpha_cap:
             alphas[:, -1] = 1
