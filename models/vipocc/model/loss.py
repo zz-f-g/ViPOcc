@@ -6,6 +6,20 @@ from models.common.model.layers import ssim
 from utils.warp import warp
 
 
+def dynamic_weighted_loss(
+    student_probs: torch.Tensor,
+    teacher_probs: torch.Tensor,
+    valid_mask: torch.Tensor,
+):
+    weights = (torch.abs(teacher_probs - 0.5) * 2).detach()[valid_mask]
+    per_element_bce = F.binary_cross_entropy(
+        student_probs[valid_mask],
+        teacher_probs[valid_mask],
+        reduction="none",
+    )
+    return torch.sum(weights * per_element_bce) / (weights.sum() + 1e-8)
+
+
 def mean_on_mask(diff, valid_mask):
     mask = valid_mask.expand_as(diff)
     if mask.sum() > 10000:

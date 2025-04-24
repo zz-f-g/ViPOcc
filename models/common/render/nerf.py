@@ -7,6 +7,7 @@ https://github.com/kwea123/nerf_pl
 import torch
 from dotmap import DotMap
 from torch.nn import functional as F
+from models.vipocc.model.loss import dynamic_weighted_loss
 
 
 class _RenderWrapper(torch.nn.Module):
@@ -178,14 +179,13 @@ class NeRFRenderer(torch.nn.Module):
         sigmas_sharpened = sigmas_sharpened - sigmas_sharpened.min()
         loss_sigma = ((sigmas_valid - sigmas_sharpened)**2).mean()
 
-        # sigmas_gap = sigmas_gap.reshape(B, K)
-        loss_gap = (torch.where(bbox_mask, torch.where(torch.all(invalid, dim=-1), 0.0, sigmas_in_bbox - sigmas), 0) ** 2).mean()
-
         if self.training and self.noise_std > 0.0:
             sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
 
         alphas = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas))  # (B, 64) (delta should be positive anyway)
         alphas_in_bbox = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas_in_bbox))
+        loss_gap = dynamic_weighted_loss(alphas, alphas_in_bbox.detach(), bbox_mask)
+
         alphas = torch.where(bbox_mask, alphas_in_bbox, alphas)
 
         if self.hard_alpha_cap:
