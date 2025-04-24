@@ -237,14 +237,13 @@ class BTSNet(torch.nn.Module):
         mlp_output = mlp_output.reshape(n, n_pts, self._d_out)
 
         sigma = mlp_output[..., 0]
-        if self.use_fine and bboxes_3d:
-            sigma_gap = torch.where(bbox_mask, sigma - sigma_in_bbox.detach(), 0.0)[..., None]
-            sigma = torch.where(bbox_mask, sigma_in_bbox, sigma)[..., None]
         if self.sample_color:
             sigma = F.softplus(sigma)
+            sigma_in_bbox = F.softplus(sigma_in_bbox)
             rgb, invalid_colors = self.sample_colors(xyz)  # (n, nv, pts, 3)
         else:
             sigma = F.relu(sigma)
+            sigma_in_bbox = F.relu(sigma_in_bbox)
             rgb = mlp_output[..., 1:4].reshape(n, 1, n_pts, 3)
             rgb = F.sigmoid(rgb)
             invalid_colors = invalid_features.unsqueeze(-2)
@@ -263,4 +262,10 @@ class BTSNet(torch.nn.Module):
         else:
             rgb = torch.zeros((n, n_pts, nv * 3), device=sigma.device)
             invalid = invalid_features.to(sigma.dtype)
-        return rgb, invalid, sigma, sigma_gap if self.use_fine and bboxes_3d else None # rgb: (B, 6250, 4*3)
+        return (
+            rgb, # [B NP nv*3]
+            invalid, # [B NP nv]
+            sigma.unsqueeze(-1), # [B NP 1]
+            sigma_in_bbox.unsqueeze(-1) if self.use_fine and bboxes_3d else None, # [B NP 1]
+            bbox_mask.unsqueeze(-1) if self.use_fine and bboxes_3d else None, # [B NP 1]
+        )
