@@ -281,7 +281,7 @@ def create_trainer(model, optimizer, criterion, lr_scheduler, train_sampler, con
     #    - Two progress bars on epochs and optionally on iterations
 
     with_amp = config["with_amp"]
-    scaler = GradScaler(enabled=with_amp)
+    scaler = GradScaler()
 
     def train_step(engine, data: dict):
         if "t__get_item__" in data:
