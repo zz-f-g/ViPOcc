@@ -170,7 +170,7 @@ class Kitti360Dataset(Dataset):
         if self.return_voxel:
             self.ssc_root_path = Path(self.data_path) / ".." / "sscbench-kitti360"
             assert self.ssc_root_path.exists()
-            self.id_w_voxel_for_test, self.id_test, self.kitti360id2sscid = load_sscbench(
+            self.img_ids_voxel, self.img_ids_test, self.imgid2sscid = load_sscbench(
                 self.ssc_root_path / "kitti_360_match.txt",
                 self._datapoints,
                 self._img_ids,
@@ -809,17 +809,17 @@ class Kitti360Dataset(Dataset):
                 bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
 
         if self.return_voxel:
-            id_test_img = self.get_img_id_from_id(sequence, id)
-            id_voxel = self.id_w_voxel_for_test[sequence][np.where(self.id_test[sequence] == id_test_img)[0][0]]
-            id_in_sscbench = self.kitti360id2sscid[sequence][id_voxel]
+            img_id = self.get_img_id_from_id(sequence, id)
+            get_first_id = lambda A, k: np.where(A == k)[0][0]
+            img_id_voxel = self.img_ids_voxel[sequence][get_first_id(self.img_ids_test[sequence], img_id)]
+            id_in_sscbench = self.imgid2sscid[sequence][img_id_voxel]
             voxel_file_path = self.ssc_root_path / "preprocess" / "labels" / sequence / f"{id_in_sscbench:0>6}_1_1.npy"
-            # inv_file_path = self.ssc_root_path / "data_2d_raw" / sequence / "voxels" / f"{id_in_sscbench:0>6}.invalid"
             voxel = np.load(voxel_file_path).astype(np.int32)
 
-            id_voxel_for_pose = np.where(self._img_ids[sequence] == id_voxel)[0][0]
+            pose_id_voxel = get_first_id(self._img_ids[sequence], img_id_voxel)
             c2w = self._poses[sequence][id, :, :] @ self._calibs["T_cam_to_pose"]["01" if is_right else "00"]
-            voxelcam2w = self._poses[sequence][id_voxel_for_pose, :, :] @ self._calibs["T_cam_to_pose"]["00"]
-            voxellidar2voxelcam = read_calib()["velo2cam"]
+            voxelcam2w = self._poses[sequence][pose_id_voxel, :, :] @ self._calibs["T_cam_to_pose"]["00"]
+            voxellidar2voxelcam = read_calib()["velo2cam"] # FIXME: wrong velo2cam
             voxellidar2c = (np.linalg.inv(c2w) @ voxelcam2w @ voxellidar2voxelcam).astype(np.float32)
 
         _proc_time = np.array(time.time() - _start_time)
