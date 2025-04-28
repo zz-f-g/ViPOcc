@@ -809,6 +809,13 @@ class Kitti360Dataset(Dataset):
                 bboxes_3d.update(convert_vertices(bboxes_3d["vertices"]))
 
         if self.return_voxel:
+            """
+            self._img_ids       {seq: pose_id2img_id}
+            self._poses         {seq: pose_id2T}
+            self._datapoints    [(seq, pose_id, is_right)]
+            self.img_ids_test   {seq: [img_id_test]}
+            self.img_ids_voxel  {seq: [img_id_test + offset]}
+            """
             img_id = self.get_img_id_from_id(sequence, id)
             get_first_id = lambda A, k: np.where(A == k)[0][0]
             img_id_voxel = self.img_ids_voxel[sequence][get_first_id(self.img_ids_test[sequence], img_id)]
