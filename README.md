@@ -4,8 +4,6 @@
 
 This is the official implementation for [ViPOcc](https://arxiv.org/abs/2412.11210):
 
-
-<!-- TODO: Authors -->
 > ViPOcc: Leveraging Visual Priors from Vision Foundation Models for Single-View 3D Occupancy Prediction
 
 > [Yi Feng](https://scholar.google.com/citations?user=8B5sG_wAAAAJ&hl=zh-CN), [Yu Han](https://openreview.net/profile?id=~Yu_Han7) , [Xijing Zhang](https://openreview.net/profile?id=~Xijing_Zhang1), [Tanghui Li](https://openreview.net/profile?id=~Tanghui_Li1), [Yanting Zhang](https://openreview.net/profile?id=~Yanting_Zhang1), [Rui Fan](https://scholar.google.com/citations?user=P5AJTXcAAAAJ&hl=en)
