@@ -15,9 +15,11 @@ log_every: 100
 batch_size: 1
 num_workers: 1
 
+image_size: [192, 640]
+points_on_ray: 64
 
 data:
-  image_size: [ 192, 640 ]
+  image_size: ${image_size}
   data_segmentation: false
   return_fisheye: false
   return_stereo: false
@@ -32,6 +34,8 @@ data:
 model_conf:
   arch: "BTSNet"
   use_code: true
+  image_size: ${image_size}
+  points_on_ray: ${points_on_ray}
 
   code:
     num_freqs: 6
@@ -63,9 +67,10 @@ model_conf:
   n_frames_render: 1
 
   sample_color: true
+  use_legacy_benchmark: false
 
 renderer:
-  n_coarse: 64
+  n_coarse: ${points_on_ray}
   n_fine: 0
   n_fine_depth: 0
   depth_std: 1.0
