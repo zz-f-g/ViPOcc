@@ -12,6 +12,7 @@ from datasets.data_util import make_test_dataset
 from models.common.render import NeRFRenderer
 from models.vipocc.model.models_bts import BTSNet
 from models.vipocc.model.ray_sampler import ImageRaySampler
+from utils import infer_sampler
 from utils.base_evaluator import base_evaluation
 from utils.metrics import MeanMetric
 from utils.bbox import Bbox, bbox3d_collate_fn
@@ -22,6 +23,7 @@ from datasets.kitti_360.voxel import (
     Visualizer,
 )
 from datasets.kitti_360.kitti_360_dataset import Kitti360Dataset
+from utils.infer_sampler import make_infer_sampler
 
 EPS = 1e-4
 
@@ -98,6 +100,22 @@ def compute_occ_scores(
     )
 
 
+def infer_sigma(
+    net: BTSNet,
+    query_points: Tensor,  # [n, p, 3]
+    query_batch_size: int,
+    bboxes_3d: list[Bbox | None] | None,
+):
+    # Query the density of the query points from the density field
+    densities = []
+    for i_from in range(0, query_points.shape[1], query_batch_size):
+        i_to = min(i_from + query_batch_size, query_points.shape[1])
+        q_pts_ = query_points[:, i_from:i_to]
+        _, _, densities_, _, _ = net(q_pts_, bboxes_3d, only_density=False)
+        densities.append(densities_)
+    return torch.cat(densities, dim=1).squeeze(-1)  # [n, p]
+
+
 class BTSWrapper(nn.Module):
     def __init__(self, renderer, config) -> None:
         super().__init__()
@@ -127,6 +145,17 @@ class BTSWrapper(nn.Module):
         )  # [4, XYZ]
         self.sampler = ImageRaySampler(self.z_near, self.z_far, channels=3)
         self.count = 0
+
+        sampler_fns = make_infer_sampler(
+            tuple(config["image_size"]),
+            config["points_on_ray"],
+            (self.z_near, self.z_far),
+            "bilinear",
+            torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        )
+        self.make_points = sampler_fns[0]
+        self.infer_sampler = sampler_fns[1]
+        self.use_legacy_benchmark = config["use_legacy_benchmark"]
 
         # for debug visualization
         calib = Kitti360Dataset._load_calibs("/mnt/disk/KITTI-360/", (0, -15))
@@ -195,32 +224,12 @@ class BTSWrapper(nn.Module):
             images_alt=images * 0.5 + 0.5,
         )
 
-        # compute voxel centers coordinates in cam system
-        q_pts = (
+        xyz_voxel = (
             (data["voxellidar2c"] @ self.points_velo_h[None, ...].expand(n, -1, -1))[:, :3, :]
             .permute(0, 2, 1)
-            .reshape(-1, 3)
+            .reshape(n, *VOXEL_RESOLUTION, 3)
         )
-
-        # Query the density of the query points from the density field
-        densities = []
-        for i_from in range(0, len(q_pts), self.query_batch_size):
-            i_to = min(i_from + self.query_batch_size, len(q_pts))
-            q_pts_ = q_pts[i_from:i_to]
-            _, _, densities_, _, _ = self.renderer.net(
-                q_pts_.unsqueeze(0), bboxes_3d, only_density=False
-            )
-            densities.append(densities_.squeeze(0))
-        densities = torch.cat(densities, dim=0).squeeze()
-        is_occupied_pred = (densities > self.occ_threshold).reshape(
-            n, *VOXEL_RESOLUTION
-        )
-
-        voxel = torch.stack(
-            [process_unlabeled_voxel_under_ground(v) for v in data["voxel"]],
-            dim=0,
-        )
-        q_pts_projected = q_pts[None, ...].expand(n, -1, -1) @ projs[
+        q_pts_projected = xyz_voxel.view(n, -1, 3) @ projs[
             :, 0, :, :
         ].permute(0, 2, 1)
         q_pts_uv = q_pts_projected[..., :2] / q_pts_projected[..., 2:]
@@ -229,6 +238,23 @@ class BTSWrapper(nn.Module):
             & (q_pts_uv < torch.tensor([1, 1], device=q_pts_uv.device)).all(-1)
             & (q_pts_projected[..., 2] > EPS)
         ).view(1, *VOXEL_RESOLUTION)
+
+        if self.use_legacy_benchmark:
+            densities = infer_sigma(self.renderer.net, xyz_voxel.view(n, -1, 3), self.query_batch_size, bboxes_3d)
+            is_occupied_pred = (densities > self.occ_threshold).reshape(
+                n, *VOXEL_RESOLUTION
+            )
+        else:
+            xyz_infer, z_samp = self.make_points(projs[:, 0])
+            densities = infer_sigma(self.renderer.net, xyz_infer.view(n, -1, 3), self.query_batch_size, bboxes_3d)
+
+            deltas = z_samp[:, 1:] - z_samp[:, :-1]  # (1, K-1)
+            delta_inf = 1e10 * torch.ones_like(deltas[:, :1])
+            deltas = torch.cat([deltas, delta_inf], -1)  # (1, K)
+            alpha = 1 - torch.exp(
+                -deltas.abs() * torch.relu(densities.view(-1, xyz_infer.shape[-2])) # [-1, K]
+            ).view(*xyz_infer.shape[:-1])
+            is_occupied_pred = self.infer_sampler(alpha, xyz_voxel, projs[:, 0]) > 0.5
 
         voxel = torch.stack(
             [process_unlabeled_voxel_under_ground(v) for v in data["voxel"]],
