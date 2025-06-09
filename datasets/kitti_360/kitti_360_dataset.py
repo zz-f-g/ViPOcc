@@ -16,7 +16,11 @@ from torch.utils.data import Dataset
 from torchvision.transforms import ColorJitter
 
 from datasets.kitti_360.sscbench import load_sscbench
-from datasets.kitti_360.voxel import read_calib
+from datasets.kitti_360.voxel import (
+    VOXEL_ORIGIN,
+    VOXEL_SIZE,
+    Visualizer,
+)
 from datasets.kitti_360.annotation import KITTI360Bbox3D
 from datasets.kitti_360.labels import id2label
 from datasets.kitti_360.process_bbox3d import convert_vertices
@@ -178,6 +182,21 @@ class Kitti360Dataset(Dataset):
 
         self._skip = 0
         self.length = len(self._datapoints)
+        self.visualizer = Visualizer(
+            self._calibs["im_size"],
+            VOXEL_ORIGIN,
+            VOXEL_SIZE,
+            self._calibs["K_perspective"],
+            self._calibs["T_velo_to_cam"]["00"],
+            np.array(
+                [
+                    [1.0000000, 0.0000000, 0.0000000, 0],
+                    [0.0000000, 0.9961947, -0.0871557, 0],
+                    [0.0000000, 0.0871557, 0.9961947, 0],
+                    [0.0000000, 000000000, 0.0000000, 1],
+                ],
+            ),
+        )
 
     def check_file_integrity(self, seq, id):
         dp = Path(self.data_path)
@@ -831,6 +850,11 @@ class Kitti360Dataset(Dataset):
             voxelcam2w = self._poses[sequence][pose_id_voxel, :, :] @ self._calibs["T_cam_to_pose"]["00"]
             voxellidar2voxelcam = self._calibs["T_velo_to_cam"]["00"]
             voxellidar2c = (np.linalg.inv(c2w) @ voxelcam2w @ voxellidar2voxelcam).astype(np.float32)
+            # for visualization
+            if False:
+                vertices_cam = bboxes_3d["vertices"]
+                print(sequence, img_id)
+                self.visualizer.render(voxel, velo2cam=voxellidar2c, bbox_vertices_in_cam=vertices_cam)
 
         _proc_time = np.array(time.time() - _start_time)
 
