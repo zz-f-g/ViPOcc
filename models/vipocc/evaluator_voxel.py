@@ -117,7 +117,7 @@ class BTSWrapper(nn.Module):
             dim=0,
         ).view(3, -1)
         points_velo = (
-            (vox_coords + torch.tensor([0.5, 0.5, 0.5]).view(3, 1)) * VOXEL_SIZE
+            (vox_coords + 0.5) * VOXEL_SIZE
             + torch.tensor(VOXEL_ORIGIN).view(3, 1)
         ).to(torch.float32)
         self.points_velo_h = torch.cat(
