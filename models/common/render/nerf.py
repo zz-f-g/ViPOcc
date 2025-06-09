@@ -166,15 +166,17 @@ class NeRFRenderer(torch.nn.Module):
             rgbs_all.append(rgbs)
             invalid_all.append(invalid)
             sigmas_all.append(sigmas)
-            sigmas_in_bbox_all.append(sigmas_in_bbox)
-            bbox_mask_all.append(bbox_mask)
+            if bboxes_3d is not None:
+                sigmas_in_bbox_all.append(sigmas_in_bbox)
+                bbox_mask_all.append(bbox_mask)
 
         # (B*K, 4) OR (SB, B'*K, 4)
         rgbs = torch.cat(rgbs_all, dim=eval_batch_dim).reshape(B, K, -1)
         invalid = torch.cat(invalid_all, dim=eval_batch_dim).reshape(B, K, -1)
         sigmas = torch.cat(sigmas_all, dim=eval_batch_dim).reshape(B, K)
-        sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
-        bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
+        if bboxes_3d is not None:
+            sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
+            bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
 
         sigmas_valid = torch.where(torch.all(invalid, dim=-1), 0.0, sigmas)
         sigmas_sharpened = (F.softmax(sigmas_valid, dim=-1) * torch.sum(sigmas_valid, dim=-1, keepdim=True))
@@ -185,10 +187,10 @@ class NeRFRenderer(torch.nn.Module):
             sigmas = sigmas + torch.randn_like(sigmas) * self.noise_std
 
         alphas = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas))  # (B, 64) (delta should be positive anyway)
-        alphas_in_bbox = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas_in_bbox))
-        loss_gap = dynamic_weighted_loss(alphas, alphas_in_bbox.detach(), bbox_mask)
-
-        alphas = torch.where(bbox_mask, alphas_in_bbox, alphas)
+        if bboxes_3d is not None:
+            alphas_in_bbox = 1 - torch.exp(-deltas.abs() * torch.relu(sigmas_in_bbox))
+            loss_gap = dynamic_weighted_loss(alphas, alphas_in_bbox.detach(), bbox_mask)
+            alphas = torch.where(bbox_mask, alphas_in_bbox, alphas)
 
         if self.hard_alpha_cap:
             alphas[:, -1] = 1
@@ -218,7 +220,14 @@ class NeRFRenderer(torch.nn.Module):
             invalid,
             z_samp,
             rgbs,
-            (loss_sigma, loss_gap),
+            (
+                loss_sigma,
+                (
+                    loss_gap
+                    if bboxes_3d is not None
+                    else torch.tensor(0, dtype=alphas.dtype, device=alphas.device)
+                ),
+            ),
         )
     def composite_depth(self, model, rays, z_samp, bboxes_3d, coarse=True, sb=0):
         """
