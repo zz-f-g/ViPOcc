@@ -19,8 +19,9 @@ from datasets.kitti_360.voxel import (
     VOXEL_ORIGIN,
     VOXEL_SIZE,
     VOXEL_RESOLUTION,
-    vis_voxel_bbox,
+    Visualizer,
 )
+from datasets.kitti_360.kitti_360_dataset import Kitti360Dataset
 
 EPS = 1e-4
 
@@ -127,6 +128,24 @@ class BTSWrapper(nn.Module):
         self.sampler = ImageRaySampler(self.z_near, self.z_far, channels=3)
         self.count = 0
 
+        # for debug visualization
+        calib = Kitti360Dataset._load_calibs("/mnt/disk/KITTI-360/", (0, -15))
+        self.visualizer = Visualizer(
+            calib["im_size"],
+            VOXEL_ORIGIN,
+            VOXEL_SIZE,
+            calib["K_perspective"],
+            calib["T_velo_to_cam"]["00"],
+            np.array(
+                [
+                    [1.0000000, 0.0000000, 0.0000000, 0],
+                    [0.0000000, 0.9961947, -0.0871557, 0],
+                    [0.0000000, 0.0871557, 0.9961947, 0],
+                    [0.0000000, 000000000, 0.0000000, 1],
+                ],
+            ),
+        )
+
     def forward(self, data):
         data = dict(data)
         images = torch.stack(data["imgs"], dim=1)  # n, v, c, h, w
@@ -210,33 +229,35 @@ class BTSWrapper(nn.Module):
             & (q_pts_uv < torch.tensor([1, 1], device=q_pts_uv.device)).all(-1)
             & (q_pts_projected[..., 2] > EPS)
         ).view(1, *VOXEL_RESOLUTION)
-        is_occupied = (voxel != 0) & (voxel != 255)
 
+        voxel = torch.stack(
+            [process_unlabeled_voxel_under_ground(v) for v in data["voxel"]],
+            dim=0,
+        )
+        is_occupied = (voxel != 0) & (voxel != 255)
         # for visualization
-        # bboxes_verts_in_cam = [bboxes_each_batch["vertices"] for bboxes_each_batch in data["3d_bboxes"]]
-        # bboxes_verts_in_voxellidar = [
-        #     (
-        #         torch.cat([verts, verts.new_ones((verts.shape[0], 8, 1))], dim=-1).view(
-        #             -1, 4
-        #         )
-        #         @ torch.inverse(voxellidar2c).T
-        #     )[..., :3].view(verts.shape[0], 8, 3)
-        #     for verts, voxellidar2c in zip(bboxes_verts_in_cam, data["voxellidar2c"])
-        # ]
-        # bboxes_verts_in_voxel = [
-        #     (verts - torch.tensor(VOXEL_ORIGIN, device=verts.device)) / VOXEL_SIZE
-        #     - torch.tensor([0.5, 0.5, 0.5], device=verts.device)
-        #     for verts in bboxes_verts_in_voxellidar
-        # ]
-        # vox = voxel[0].cpu().numpy()
-        # vox = np.where((vox == 0) | (~in_frustum.cpu().numpy()[0]), 255, vox)
-        # non_empty_indices = np.stack(np.where(vox != 255), axis=0).T
-        # semantic_values = vox[vox != 255]
-        # vox_pred = is_occupied_pred[0].long().cpu().detach().numpy()
-        # non_empty_indices_pred = np.stack(np.where((vox_pred != 0) & in_frustum.cpu().numpy()[0])).T
-        # __import__('ipdb').set_trace()
-        # vis_voxel_bbox(non_empty_indices, semantic_values, bboxes_verts_in_voxel[0].cpu().numpy())
-        # vis_voxel_bbox(non_empty_indices_pred, None, bboxes_verts_in_voxel[0].cpu().numpy())
+        if False:
+            iop = is_occupied_pred.clone()
+            iop[..., 16:] = 0
+            self.visualizer.render(
+                iop[0].cpu().numpy(),
+                velo2cam=data["voxellidar2c"][0].cpu().numpy(),
+                bbox_vertices_in_cam=(
+                    data["3d_bboxes"][0]["vertices"].cpu().numpy()
+                    if "3d_bboxes" in data
+                    else None
+                ),
+            )
+            self.visualizer.render(
+                voxel[0].cpu().numpy(),
+                velo2cam=data["voxellidar2c"][0].cpu().numpy(),
+                bbox_vertices_in_cam=(
+                    data["3d_bboxes"][0]["vertices"].cpu().numpy()
+                    if "3d_bboxes" in data
+                    else None
+                ),
+            )
+            __import__('ipdb').set_trace()
 
         # o_acc, ie_acc, ie_rec = compute_occ_scores(is_occupied_pred, voxel, None, (voxel != 255))
         data["O_acc"] = 0
