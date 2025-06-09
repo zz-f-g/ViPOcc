@@ -71,6 +71,8 @@ def base_evaluation(local_rank, config, get_dataflow, initialize, get_metrics):
 
     try:
         state = evaluator.run(test_loader, max_epochs=1)
+        if "IoU_I" in state.metrics and "IoU_U" in state.metrics:
+            state.metrics["IoU"] = state.metrics["IoU_I"] / state.metrics["IoU_U"]
         log_metrics(logger, state.times["COMPLETED"], "Test", state.metrics)
         logger.info(f"Checkpoint: {str(cp_path)}")
     except Exception as e:
