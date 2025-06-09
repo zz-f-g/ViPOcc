@@ -829,7 +829,7 @@ class Kitti360Dataset(Dataset):
             pose_id_voxel = get_first_id(self._img_ids[sequence], img_id_voxel)
             c2w = self._poses[sequence][id, :, :] @ self._calibs["T_cam_to_pose"]["01" if is_right else "00"]
             voxelcam2w = self._poses[sequence][pose_id_voxel, :, :] @ self._calibs["T_cam_to_pose"]["00"]
-            voxellidar2voxelcam = read_calib()["velo2cam"] # FIXME: wrong velo2cam
+            voxellidar2voxelcam = self._calibs["T_velo_to_cam"]["00"]
             voxellidar2c = (np.linalg.inv(c2w) @ voxelcam2w @ voxellidar2voxelcam).astype(np.float32)
 
         _proc_time = np.array(time.time() - _start_time)
