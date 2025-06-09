@@ -1,13 +1,9 @@
-import argparse
-from pathlib import Path
 import yaml
 
 import numpy as np
 from numpy.typing import NDArray
 import open3d as o3d
-from mayavi import mlab
 
-from utils.bbox import Bbox
 from datasets.kitti_360.process_bbox3d import EDGES
 
 EDGE_LINES = [list(edge) for group in EDGES.values() for edge in group]
@@ -17,77 +13,14 @@ VOXEL_SIZE = 0.2
 VOXEL_RESOLUTION = (256, 256, 32)
 
 
-def read_calib():
-    P = np.array(
-        [
-            552.554261, 0.000000, 682.049453, 0.000000,
-            0.000000, 552.554261, 238.769549, 0.000000,
-            0.000000, 0.000000, 1.000000, 0.000000,
-        ]
-    ).reshape(3, 4)
-    cam2velo = np.array(
-        [
-            0.04307104361, -0.08829286498, 0.995162929, 0.8043914418,
-            -0.999004371, 0.007784614041, 0.04392796942, 0.2993489574,
-            -0.01162548558, -0.9960641394, -0.08786966659, -0.1770225824,
-        ]
-    ).reshape(3, 4)
-    return {
-        "intrinsic": P,
-        "velo2cam": np.linalg.inv(
-            np.concatenate(
-                [cam2velo, np.array([0, 0, 0, 1]).reshape(1, 4)],
-                axis=0,
-            )
-        ),
-    }
-
-
-def project_voxel(
-    cam_K: NDArray[np.float32],
-    cam_E: NDArray[np.float32],
-    img_H: int | None = None,
-    img_W: int | None = None,
-):
-    X, Y, Z = VOXEL_RESOLUTION
-    xx, yy, zz = np.meshgrid(range(X), range(Y), range(Z), indexing="ij")
-    vox_coords = np.concatenate(
-        [
-            xx.reshape(1, -1),
-            yy.reshape(1, -1),
-            zz.reshape(1, -1),
-        ],
-        axis=0,
-    ).astype(
-        np.int32
-    )  # [3, XYZ]
-    points_velo = (
-        vox_coords + np.array([0.5, 0.5, 0.5]).reshape(3, 1)
-    ) * VOXEL_SIZE + VOXEL_ORIGIN.reshape(3, 1)
-    points_cam = cam_E @ np.concatenate(
-        (
-            points_velo,
-            np.ones_like(points_velo[:1, :]),
-        ),
-        axis=0,
+def create_wireframe_box(vertices, color=[1, 0, 0]):
+    line_colors = [color for _ in EDGE_LINES]
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(vertices),
+        lines=o3d.utility.Vector2iVector(EDGE_LINES),
     )
-    points_proj_ = (cam_K @ points_cam).T
-    z = points_proj_[:, 2].reshape(X, Y, Z)
-    points_proj = (points_proj_[:, :2] / points_proj_[:, 2:] + 1e-3).reshape(X, Y, Z, 2)
-    if img_H is None or img_W is None:
-        frustum_mask = (
-            (points_proj > np.array([-1, -1])).all(axis=-1)
-            & (points_proj < np.array([1, 1])).all(axis=-1)
-            & (z > 1e-3)
-        )
-
-    else:
-        frustum_mask = (
-            (points_proj > 0).all(axis=-1)
-            & (points_proj < np.array([img_W - 1, img_H - 1])).all(axis=-1)
-            & (z > 1e-3)
-        )
-    return points_proj, z, frustum_mask
+    line_set.colors = o3d.utility.Vector3dVector(line_colors)
+    return line_set
 
 
 def vis_voxel_grid(non_empty_indices: NDArray[int], semantic_values: NDArray[int] | None = None):
@@ -167,11 +100,6 @@ def vis_voxel_bbox(non_empty_indices: NDArray[np.uint32], semantic_values: NDArr
     )
     voxel_grid = o3d.geometry.VoxelGrid.create_from_point_cloud(pcd, voxel_size=1.0)
 
-    def create_wireframe_box(vertices, color=[1, 0, 0]):
-        line_colors = [color for _ in EDGE_LINES]
-        line_set = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(vertices),
-            lines=o3d.utility.Vector2iVector(EDGE_LINES),
         )
         line_set.colors = o3d.utility.Vector3dVector(line_colors)
         return line_set
