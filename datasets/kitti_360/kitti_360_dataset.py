@@ -559,6 +559,7 @@ class Kitti360Dataset(Dataset):
         ).T
         vertices = []
         semanticId = []
+        vertices_world = []
         for bbox in seq_3d_bboxes[-1] + seq_3d_bboxes[img_id]:
             if not filter_bbox(bbox):
                 continue
@@ -566,6 +567,7 @@ class Kitti360Dataset(Dataset):
                 if id2label[bbox.semanticId].name not in self.bboxes_semantic_labels:
                     continue
             vertices.append(transform_w2c(bbox.vertices))
+            vertices_world.append(bbox.vertices)
             semanticId.append(bbox.semanticId)
         # vertices, semanticId = zip(
         #     *map(
@@ -587,6 +589,7 @@ class Kitti360Dataset(Dataset):
         if vertices:
             return {
                 "vertices": torch.tensor(np.stack(list(vertices), axis=0), dtype=torch.float32),
+                "vertices_world": torch.tensor(np.stack(vertices_world, axis=0), dtype=torch.float32),
                 "semanticId": torch.tensor(np.array(list(semanticId)), dtype=torch.float32),
             }
         else:
