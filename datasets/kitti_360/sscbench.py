@@ -96,7 +96,7 @@ def load_sscbench(
         img_ids_voxel[seq] = find_next_id_w_voxel(
             img_ids_test[seq], sscid2imgid[seq][::5]
         )
-    return img_ids_voxel, img_ids_test, imgid2sscid
+    return img_ids_voxel, img_ids_test, imgid2sscid, sscid2imgid
 
 
 if __name__ == "__main__":
