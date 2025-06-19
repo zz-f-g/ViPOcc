@@ -271,8 +271,9 @@ class NeRFRenderer(torch.nn.Module):
 
         # (B*K, 4) OR (SB, B'*K, 4)
         sigmas = torch.cat(sigmas_all, dim=eval_batch_dim).reshape(B, K)
-        sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
-        bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
+        if bboxes_3d is not None:
+            sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
+            bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
 
         if self.depth_align_teacher:
             alphas = 1 - torch.exp(

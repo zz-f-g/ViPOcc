@@ -239,11 +239,13 @@ class BTSNet(torch.nn.Module):
         sigma = mlp_output[..., 0]
         if self.sample_color:
             sigma = F.softplus(sigma)
-            sigma_in_bbox = F.softplus(sigma_in_bbox)
+            if self.use_fine and bboxes_3d: # whether use fine mlp handling object
+                sigma_in_bbox = F.softplus(sigma_in_bbox)
             rgb, invalid_colors = self.sample_colors(xyz)  # (n, nv, pts, 3)
         else:
             sigma = F.relu(sigma)
-            sigma_in_bbox = F.relu(sigma_in_bbox)
+            if self.use_fine and bboxes_3d: # whether use fine mlp handling object
+                sigma_in_bbox = F.relu(sigma_in_bbox)
             rgb = mlp_output[..., 1:4].reshape(n, 1, n_pts, 3)
             rgb = F.sigmoid(rgb)
             invalid_colors = invalid_features.unsqueeze(-2)
