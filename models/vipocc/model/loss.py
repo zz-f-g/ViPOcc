@@ -20,6 +20,26 @@ def dynamic_weighted_loss(
     return torch.sum(weights * per_element_bce) / (weights.sum() + 1e-8)
 
 
+def discrimination_loss(
+    rgb: torch.Tensor,
+    sigma: torch.Tensor,
+    invalid: torch.Tensor,
+):
+    B, K, V = invalid.shape
+    assert sigma.shape == (B, K)
+    rgb = rgb.view(B, K, V, 3)
+
+    rgb_delta = torch.abs(rgb[:, 1:] - rgb[:, :-1]).sum(dim=-1)  # [B, K-1, V]
+    sigma_delta = torch.abs(sigma[:, 1:] - sigma[:, :-1])  # [B, K-1]
+    valid_delta = (1 - invalid[:, 1:]) * (1 - invalid[:, :-1])  # * == & for float
+    loss = (
+        (valid_delta * rgb_delta).amax(dim=-1)
+        * torch.exp(-sigma_delta)
+        * torch.maximum(sigma[:, 1:], sigma[:, :-1]).detach().clamp_max(10)
+    ).mean()
+    return loss
+
+
 def mean_on_mask(diff, valid_mask):
     mask = valid_mask.expand_as(diff)
     if mask.sum() > 10000:
@@ -107,6 +127,7 @@ class ReconstructionLoss:
 
         self.depth_recon_version = config.get("depth_recon_version", 1)
         self.loss_sigma_weight = config.get("loss_sigma_weight", 0)
+        self.loss_disc_weight = config.get("loss_disc_weight", 0)
         self.loss_gap_weight = config.get("loss_gap_weight", 0)
         self.loss_gap_start_epoch = config.get("loss_gap_start_epoch", 0)
 
@@ -287,10 +308,12 @@ class ReconstructionLoss:
 
             loss += loss_temp_align * self.lambda_temporal_alignment
         loss = loss + self.loss_sigma_weight * coarse_0["loss_sigma"]
+        loss = loss + self.loss_disc_weight * coarse_0["loss_disc"]
         if coarse_0["loss_gap"] is not None and engine.state.epoch >= self.loss_gap_start_epoch:
             loss = loss + self.loss_gap_weight * coarse_0["loss_gap"]
 
         loss_dict["loss_sigma"] = coarse_0["loss_sigma"]
+        loss_dict["loss_disc"] = coarse_0["loss_disc"]
         loss_dict["loss_rgb_coarse"] = loss_coarse_all
         loss_dict["loss_rgb_fine"] = loss_fine_all
         loss_dict["loss_depth_super"] = loss_depth_super

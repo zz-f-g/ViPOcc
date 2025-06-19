@@ -7,7 +7,7 @@ https://github.com/kwea123/nerf_pl
 import torch
 from dotmap import DotMap
 from torch.nn import functional as F
-from models.vipocc.model.loss import dynamic_weighted_loss
+from models.vipocc.model.loss import discrimination_loss, dynamic_weighted_loss
 
 
 class _RenderWrapper(torch.nn.Module):
@@ -174,6 +174,8 @@ class NeRFRenderer(torch.nn.Module):
         rgbs = torch.cat(rgbs_all, dim=eval_batch_dim).reshape(B, K, -1)
         invalid = torch.cat(invalid_all, dim=eval_batch_dim).reshape(B, K, -1)
         sigmas = torch.cat(sigmas_all, dim=eval_batch_dim).reshape(B, K)
+        loss_disc = discrimination_loss(rgbs, sigmas, invalid)
+
         if bboxes_3d is not None:
             sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
             bbox_mask = torch.cat(bbox_mask_all, dim=eval_batch_dim).reshape(B, K)
@@ -221,6 +223,7 @@ class NeRFRenderer(torch.nn.Module):
             z_samp,
             rgbs,
             (
+                loss_disc,
                 loss_sigma,
                 (
                     loss_gap
@@ -332,7 +335,7 @@ class NeRFRenderer(torch.nn.Module):
                 want_z_samps=want_z_samps, want_rgb_samps=want_rgb_samps
             ),
         )
-        outputs.coarse.loss_sigma, outputs.coarse.loss_gap = coarse_composite[-1]
+        outputs.coarse.loss_disc, outputs.coarse.loss_sigma, outputs.coarse.loss_gap = coarse_composite[-1]
 
         return outputs
 
