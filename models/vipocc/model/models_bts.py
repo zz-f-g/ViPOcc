@@ -48,7 +48,7 @@ class BTSNet(torch.nn.Module):
         if self.learn_empty:
             self.empty_feature = nn.Parameter(torch.randn((self.encoder.latent_size,), requires_grad=True))
 
-    def encode(self, images, Ks, poses_c2w, ids_encoder=None, ids_render=None, images_alt=None):
+    def encode(self, images, Ks, poses_c2w, ids_encoder=None, ids_render=None, images_alt=None, pdepths=None):
         """
         Encode the input images using the `self.encoder` (resnet50 + modified mono2 dec), and save the results in
         `self.grid_f_features`.
@@ -79,12 +79,16 @@ class BTSNet(torch.nn.Module):
             images = images * .5 + .5
 
         if ids_render is None:
-            images_render = images
+            rgbd_render = images if pdepths is None else torch.cat([images, pdepths], dim=2)
             Ks_render = Ks
             poses_w2c_render = poses_w2c
             ids_render = list(range(len(images)))
         else:  # √
-            images_render = images[:, ids_render]  # (B, V/2, 3, H, W)
+            rgbd_render = (
+                images[:, ids_render]
+                if pdepths is None
+                else torch.cat([images[:, ids_render], pdepths[:, ids_render]], dim=2)
+            )
             Ks_render = Ks[:, ids_render]
             poses_w2c_render = poses_w2c[:, ids_render]
 
@@ -111,7 +115,7 @@ class BTSNet(torch.nn.Module):
         self.grid_f_Ks = Ks_encoder
         self.grid_f_poses_w2c = poses_w2c_encoder
 
-        self.grid_c_imgs = images_render
+        self.grid_c_imgs = rgbd_render
         self.grid_c_Ks = Ks_render
         self.grid_c_poses_w2c = poses_w2c_render
 
@@ -241,7 +245,7 @@ class BTSNet(torch.nn.Module):
             sigma = F.softplus(sigma)
             if self.use_fine and bboxes_3d: # whether use fine mlp handling object
                 sigma_in_bbox = F.softplus(sigma_in_bbox)
-            rgb, invalid_colors = self.sample_colors(xyz)  # (n, nv, pts, 3)
+            rgb, invalid_colors = self.sample_colors(xyz)  # (n, nv, pts, 3/4)
         else:
             sigma = F.relu(sigma)
             if self.use_fine and bboxes_3d: # whether use fine mlp handling object
@@ -256,7 +260,7 @@ class BTSNet(torch.nn.Module):
 
         if not only_density:
             _, _, _, c = rgb.shape
-            rgb = rgb.permute(0, 2, 1, 3).reshape(n, n_pts, nv * c)  # (n, pts, nv * 3)
+            rgb = rgb.permute(0, 2, 1, 3).reshape(n, n_pts, nv * c)  # (n, pts, nv * 3/4)
             invalid_colors = invalid_colors.permute(0, 2, 1, 3).reshape(n, n_pts, nv)
 
             invalid = invalid_colors | invalid_features  # Invalid features gets broadcasted to (n, n_pts, nv)
@@ -265,7 +269,7 @@ class BTSNet(torch.nn.Module):
             rgb = torch.zeros((n, n_pts, nv * 3), device=sigma.device)
             invalid = invalid_features.to(sigma.dtype)
         return (
-            rgb, # [B NP nv*3]
+            rgb, # [B NP nv*3/4]
             invalid, # [B NP nv]
             sigma.unsqueeze(-1), # [B NP 1]
             sigma_in_bbox.unsqueeze(-1) if self.use_fine and bboxes_3d else None, # [B NP 1]

@@ -51,6 +51,7 @@ def make_datasets(config):
             return_fisheye=config.get("return_fisheye", True),
             return_gt_depth=config.get("return_gt_depth", False),
             return_pseudo_depth=config.get("return_pseudo_depth", False),
+            return_all_pseudo_depth=config.get("return_all_pseudo_depth", False),
             return_3d_bboxes=config.get("return_3d_bboxes", False),
             bboxes_semantic_labels=config.get("bboxes_semantic_labels", []),
             return_segmentation=config.get("data_segmentation", False),

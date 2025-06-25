@@ -79,6 +79,7 @@ class NeRFRenderer(torch.nn.Module):
             sched=None,  # ray sampling schedule for coarse and fine rays
             hard_alpha_cap=False,
             depth_align_teacher=False,
+            loss_disc_signal=False,
     ):
         super().__init__()
         self.n_coarse = n_coarse
@@ -103,6 +104,7 @@ class NeRFRenderer(torch.nn.Module):
         )
         self.hard_alpha_cap = hard_alpha_cap
         self.depth_align_teacher = depth_align_teacher
+        self.loss_disc_signal = loss_disc_signal
 
         # self.sampler = ray_samplers.LinearDisparitySampler(num_samples=n_coarse)
 
@@ -174,7 +176,13 @@ class NeRFRenderer(torch.nn.Module):
         rgbs = torch.cat(rgbs_all, dim=eval_batch_dim).reshape(B, K, -1)
         invalid = torch.cat(invalid_all, dim=eval_batch_dim).reshape(B, K, -1)
         sigmas = torch.cat(sigmas_all, dim=eval_batch_dim).reshape(B, K)
-        loss_disc = discrimination_loss(rgbs, sigmas, invalid)
+        if self.loss_disc_signal == "rgb":
+            loss_disc = discrimination_loss(rgbs, sigmas, invalid)
+        elif self.loss_disc_signal == "depth":
+            loss_disc = discrimination_loss(rgbs.view(B, K, -1, 4)[..., -1], sigmas, invalid)
+            rgbs = rgbs.view(B, K, -1, 4)[..., :3].reshape(B, K, -1)
+        else:
+            raise NotImplementedError
 
         if bboxes_3d is not None:
             sigmas_in_bbox = torch.cat(sigmas_in_bbox_all, dim=eval_batch_dim).reshape(B, K)
@@ -402,6 +410,7 @@ class NeRFRenderer(torch.nn.Module):
             sched=conf.get("sched", None),
             hard_alpha_cap=conf.get("hard_alpha_cap", False),
             depth_align_teacher=conf.get("depth_align_teacher", False),
+            loss_disc_signal=conf.get("loss_disc_signal"),
         )
 
     def bind_parallel(self, net, gpus=None, simple_output=False):

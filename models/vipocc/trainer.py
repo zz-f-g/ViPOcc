@@ -39,6 +39,8 @@ class BTSWrapper(nn.Module):
         frames_render = config.get("n_frames_render", 2)  # 2
         self.frame_sample_mode = config.get("frame_sample_mode", "default")
         self.loss_from_single_img = config.get("loss_from_single_img", False)
+        self.loss_disc_signal = config["loss_disc_signal"]
+        assert self.loss_disc_signal in ("rgb", "depth")
 
         self.sample_mode = config.get("sample_mode", "random")  # patch
         self.patch_size = config.get("patch_size", 16)  # 8
@@ -103,6 +105,11 @@ class BTSWrapper(nn.Module):
         images = torch.stack(data["imgs"], dim=1)  # n, v, 3, h, w
         poses = torch.stack(data["poses"], dim=1)  # n, v, 4, 4 w2c
         projs = torch.stack(data["projs"], dim=1)  # n, v, 4, 4 (-1, 1)
+        pdepths = (
+            torch.stack(data["all_pseudo_depth"], dim=1).unsqueeze(2) / 80  # n, v, 1, h, w
+            if data["all_pseudo_depth"]
+            else None
+        )
         bboxes_3d = (
             [
                 (
@@ -185,7 +192,7 @@ class BTSWrapper(nn.Module):
 
         # encode the first frame into grid_f_features: list of 4 [16, 1, 64, 192, 640]
         self.renderer.net.encode(images, projs, poses, ids_encoder=ids_encoder, ids_render=ids_render,
-                                 images_alt=images_ip)
+                                 images_alt=images_ip, pdepths=pdepths if self.loss_disc_signal == "depth" else None)
 
         # ================================ validation during training ================================
         if not self.training:

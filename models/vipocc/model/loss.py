@@ -27,7 +27,7 @@ def discrimination_loss(
 ):
     B, K, V = invalid.shape
     assert sigma.shape == (B, K)
-    rgb = rgb.view(B, K, V, 3)
+    rgb = rgb.view(B, K, V, -1)
 
     rgb_delta = torch.abs(rgb[:, 1:] - rgb[:, :-1]).sum(dim=-1)  # [B, K-1, V]
     sigma_delta = torch.abs(sigma[:, 1:] - sigma[:, :-1])  # [B, K-1]

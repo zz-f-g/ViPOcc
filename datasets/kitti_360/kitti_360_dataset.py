@@ -92,6 +92,7 @@ class Kitti360Dataset(Dataset):
         return_voxel=False,
         return_gt_depth=False,
         return_pseudo_depth=False,
+        return_all_pseudo_depth=False,
         return_samples=False,
         return_3d_bboxes=False,
         bboxes_semantic_labels=["car"],
@@ -119,6 +120,7 @@ class Kitti360Dataset(Dataset):
         self.return_gt_depth = return_gt_depth
 
         self.return_pseudo_depth = return_pseudo_depth
+        self.return_all_pseudo_depth = return_all_pseudo_depth
         self.return_samples = return_samples
 
         self.return_3d_bboxes = return_3d_bboxes
@@ -499,7 +501,7 @@ class Kitti360Dataset(Dataset):
     def get_img_id_from_id(self, sequence, id):
         return self._img_ids[sequence][id]
 
-    def load_images(self, seq, img_ids, load_left, load_right, img_ids_fish=None):
+    def load_images(self, seq, img_ids, load_left, load_right, img_ids_fish=None, is_depth=False):
         """
         Load images from a sequence.
         :param seq: str, Sequence name.
@@ -509,6 +511,46 @@ class Kitti360Dataset(Dataset):
 
         Return 4 images lists (imgs_p_left, imgs_f_left, imgs_p_right, imgs_f_right)
         """
+
+        def load(is_depth: bool, cam_dir: int, img_id: int):
+            # assert cam_dir in (0, 1, 2, 3)
+            if is_depth:
+                return np.load(
+                    os.path.join(
+                        self.data_path,
+                        "depth",
+                        seq,
+                        f"image_0{cam_dir}",
+                        (
+                            self._perspective_folder
+                            if cam_dir < 2
+                            else self._fisheye_folder
+                        ),
+                        f"{img_id:010d}.npy",
+                    )
+                ).astype(np.float32)
+            else:
+                return (
+                    cv2.cvtColor(
+                        cv2.imread(
+                            os.path.join(
+                                self.data_path,
+                                "data_2d_raw",
+                                seq,
+                                f"image_0{cam_dir}",
+                                (
+                                    self._perspective_folder
+                                    if cam_dir < 2
+                                    else self._fisheye_folder
+                                ),
+                                f"{img_id:010d}.png",
+                            )
+                        ),
+                        cv2.COLOR_BGR2RGB,
+                    ).astype(np.float32)
+                    / 255
+                )
+
         imgs_p_left = []
         imgs_f_left = []
         imgs_p_right = []
@@ -519,28 +561,16 @@ class Kitti360Dataset(Dataset):
 
         for id in img_ids:
             if load_left:
-                img_perspective = cv2.cvtColor(cv2.imread(
-                    os.path.join(self.data_path, "data_2d_raw", seq, "image_00", self._perspective_folder,
-                                 f"{id:010d}.png")), cv2.COLOR_BGR2RGB).astype(np.float32) / 255
-                imgs_p_left += [img_perspective]
+                imgs_p_left += [load(is_depth, 0, id)]
 
             if load_right:
-                img_perspective = cv2.cvtColor(cv2.imread(
-                    os.path.join(self.data_path, "data_2d_raw", seq, "image_01", self._perspective_folder,
-                                 f"{id:010d}.png")), cv2.COLOR_BGR2RGB).astype(np.float32) / 255
-                imgs_p_right += [img_perspective]
+                imgs_p_right += [load(is_depth, 1, id)]
 
         for id in img_ids_fish:
             if load_left:
-                img_fisheye = cv2.cvtColor(cv2.imread(
-                    os.path.join(self.data_path, "data_2d_raw", seq, "image_02", self._fisheye_folder,
-                                 f"{id:010d}.png")), cv2.COLOR_BGR2RGB).astype(np.float32) / 255
-                imgs_f_left += [img_fisheye]
+                imgs_f_left += [load(is_depth, 2, id)]
             if load_right:
-                img_fisheye = cv2.cvtColor(cv2.imread(
-                    os.path.join(self.data_path, "data_2d_raw", seq, "image_03", self._fisheye_folder,
-                                 f"{id:010d}.png")), cv2.COLOR_BGR2RGB).astype(np.float32) / 255
-                imgs_f_right += [img_fisheye]
+                imgs_f_right += [load(is_depth, 3, id)]
 
         return imgs_p_left, imgs_f_left, imgs_p_right, imgs_f_right
 
@@ -806,6 +836,20 @@ class Kitti360Dataset(Dataset):
                                 self.load_pseudo_depth(sequence, img_ids[1], is_right)]
         else:
             pseudo_depth = []
+        if self.return_all_pseudo_depth:
+            pds_p_left, pds_f_left, pds_p_right, pds_f_right = self.load_images(
+                sequence,
+                img_ids,
+                load_left,
+                load_right,
+                img_ids_fish=img_ids_fish,
+                is_depth=True,
+            )
+            pds = (
+                pds_p_left + pds_p_right + pds_f_left + pds_f_right
+                if not is_right
+                else pds_p_right + pds_p_left + pds_f_right + pds_f_left
+            )
         if self.return_gt_depth:
             if len(img_ids) == 1:
                 gt_depth = [self.load_gt_depth(sequence, img_ids[0])]
@@ -869,6 +913,7 @@ class Kitti360Dataset(Dataset):
             "poses": poses,
             "depths": gt_depth,
             "pseudo_depth": pseudo_depth,
+            "all_pseudo_depth": pds if self.return_all_pseudo_depth else [],
             "samples": samples,
             "ts": ids,
             "segs": segs,

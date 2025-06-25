@@ -29,6 +29,7 @@ data:
   return_gt_depth: true
   return_pseudo_depth: true
   return_3d_bboxes: true
+  return_all_pseudo_depth: true
   bboxes_semantic_labels: ["car",]
 
 model_conf:
@@ -74,6 +75,7 @@ model_conf:
 
   learn_empty: false
   code_mode: z
+  loss_disc_signal: "depth"
 
 loss:
   criterion: "l1+ssim"
@@ -84,6 +86,7 @@ loss:
   depth_recon_version: 1
   loss_sigma_weight: 0.05
   loss_gap_weight: 0.01
+  loss_disc_weight: 0.05
   loss_gap_start_epoch: 10
 
 
@@ -102,3 +105,4 @@ renderer:
   lindisp: true
   hard_alpha_cap: true
   depth_align_teacher: true
+  loss_disc_signal: ${model_conf.loss_disc_signal}
