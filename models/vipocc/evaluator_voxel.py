@@ -159,7 +159,7 @@ class BTSWrapper(nn.Module):
         self.bbox_margin_ratio = config["bbox_margin_ratio"]
 
         # for debug visualization
-        calib = Kitti360Dataset._load_calibs("/mnt/disk/KITTI-360/", (0, -15))
+        calib = Kitti360Dataset._load_calibs("data/KITTI-360/", (0, -15))
         self.visualizer = Visualizer(
             calib["im_size"],
             VOXEL_ORIGIN,
