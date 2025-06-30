@@ -15,7 +15,7 @@ from models.vipocc.model.ray_sampler import ImageRaySampler
 from utils import infer_sampler
 from utils.base_evaluator import base_evaluation
 from utils.metrics import MeanMetric
-from utils.bbox import Bbox, bbox3d_collate_fn
+from utils.bbox import Bbox, bbox3d_collate_fn, point_in_which_bbox
 from datasets.kitti_360.voxel import (
     VOXEL_ORIGIN,
     VOXEL_SIZE,
@@ -156,6 +156,7 @@ class BTSWrapper(nn.Module):
         self.make_points = sampler_fns[0]
         self.infer_sampler = sampler_fns[1]
         self.use_legacy_benchmark = config["use_legacy_benchmark"]
+        self.bbox_margin_ratio = config["bbox_margin_ratio"]
 
         # for debug visualization
         calib = Kitti360Dataset._load_calibs("/mnt/disk/KITTI-360/", (0, -15))
@@ -185,7 +186,7 @@ class BTSWrapper(nn.Module):
                 (
                     Bbox(
                         center=bbox_dict["center"],
-                        whl=bbox_dict["whl"],
+                        whl=bbox_dict["whl"] * self.bbox_margin_ratio,
                         rotation=bbox_dict["rotation"],
                         label=bbox_dict["semanticId"],
                     )
@@ -284,15 +285,39 @@ class BTSWrapper(nn.Module):
                 ),
             )
             __import__('ipdb').set_trace()
-        o_acc, ie_acc, ie_rec = compute_occ_scores(
+
+        scene_o_acc, scene_ie_acc, scene_ie_rec = compute_occ_scores(
             is_occupied_pred,
             is_occupied,
             data["visible_mask"],
             (voxel != 255),
         )
-        data["O_acc"] = o_acc
-        data["IE_acc"] = ie_acc
-        data["IE_rec"] = ie_rec
+        data["scene_O_acc"] = scene_o_acc
+        data["scene_IE_acc"] = scene_ie_acc
+        data["scene_IE_rec"] = scene_ie_rec
+
+        in_bbox = torch.stack(
+            [
+                (
+                    point_in_which_bbox(xyz.view(-1, 3), bbox)[1].any(dim=0)
+                    if bbox is not None
+                    else is_occupied.new_zeros(
+                        is_occupied.shape, dtype=torch.bool
+                    ).view(-1)
+                )
+                for xyz, bbox in zip(torch.unbind(xyz_voxel, dim=0), bboxes_3d)
+            ],
+            dim=0,
+        ).view(n, *VOXEL_RESOLUTION)
+        object_o_acc, object_ie_acc, object_ie_rec = compute_occ_scores(
+            is_occupied_pred,
+            is_occupied,
+            data["visible_mask"],
+            (voxel != 255) & in_bbox,
+        )
+        data["object_O_acc"] = object_o_acc
+        data["object_IE_acc"] = object_ie_acc
+        data["object_IE_rec"] = object_ie_rec
 
         data["IoU_I"] = (
             (is_occupied_pred & is_occupied & in_frustum & (voxel != 255))
@@ -336,9 +361,12 @@ def get_dataflow(config):
 
 def get_metrics(config, device):
     names = [
-        "O_acc",
-        "IE_acc",
-        "IE_rec",
+        "scene_O_acc",
+        "scene_IE_acc",
+        "scene_IE_rec",
+        "object_O_acc",
+        "object_IE_acc",
+        "object_IE_rec",
         "IoU_I",
         "IoU_U",
         "IoU",
