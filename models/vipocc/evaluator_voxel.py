@@ -284,11 +284,16 @@ class BTSWrapper(nn.Module):
                 ),
             )
             __import__('ipdb').set_trace()
+        o_acc, ie_acc, ie_rec = compute_occ_scores(
+            is_occupied_pred,
+            is_occupied,
+            data["visible_mask"],
+            (voxel != 255),
+        )
+        data["O_acc"] = o_acc
+        data["IE_acc"] = ie_acc
+        data["IE_rec"] = ie_rec
 
-        # o_acc, ie_acc, ie_rec = compute_occ_scores(is_occupied_pred, voxel, None, (voxel != 255))
-        data["O_acc"] = 0
-        data["IE_acc"] = 0
-        data["IE_rec"] = 0
         data["IoU_I"] = (
             (is_occupied_pred & is_occupied & in_frustum & (voxel != 255))
             .float()
