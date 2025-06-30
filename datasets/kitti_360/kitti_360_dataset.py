@@ -888,6 +888,9 @@ class Kitti360Dataset(Dataset):
             id_in_sscbench = self.imgid2sscid[sequence][img_id_voxel]
             voxel_file_path = self.ssc_root_path / "preprocess" / "labels" / sequence / f"{id_in_sscbench:0>6}_1_1.npy"
             voxel = np.load(voxel_file_path).astype(np.int32)
+            visible_mask_file_path = Path(self.data_path) / "visible_mask" / sequence / f"{img_id:0>10}.npy"
+            if visible_mask_file_path.exists():
+                visible_mask = np.load(visible_mask_file_path)
 
             pose_id_voxel = get_first_id(self._img_ids[sequence], img_id_voxel)
             c2w = self._poses[sequence][id, :, :] @ self._calibs["T_cam_to_pose"]["01" if is_right else "00"]
@@ -933,6 +936,8 @@ class Kitti360Dataset(Dataset):
                     "voxel_file_path": voxel_file_path.as_posix(),
                 }
             )
+            if visible_mask_file_path.exists():
+                data.update({"visible_mask": visible_mask})
         return data
 
     def __len__(self) -> int:
