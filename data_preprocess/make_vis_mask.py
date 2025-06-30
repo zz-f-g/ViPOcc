@@ -126,15 +126,15 @@ def reduce_ray(is_occupied_each_ray: Tensor):
             [False, False,  True,  True,  True,  True,  True, False, False, False],
             [False,  True, False,  True,  True,  True, False, False,  True, False]])
     >>> print(reduce_ray(rayocc))
-    tensor([[ True,  True,  True, False, False, False, False, False, False, False],
-            [ True,  True,  True, False, False, False, False, False, False, False],
-            [ True,  True,  True,  True,  True,  True,  True,  True, False, False],
-            [ True,  True,  True, False, False, False, False, False, False, False],
-            [ True,  True, False, False, False, False, False, False, False, False]])
+    tensor([[ True,  True, False, False, False, False, False, False, False, False],
+            [ True,  True, False, False, False, False, False, False, False, False],
+            [ True,  True,  True,  True,  True,  True,  True, False, False, False],
+            [ True,  True, False, False, False, False, False, False, False, False],
+            [ True, False, False, False, False, False, False, False, False, False]])
     """
     assert is_occupied_each_ray.dtype == torch.bool
     occupied_cumsum = torch.cumsum(is_occupied_each_ray.to(torch.int32), dim=-1)
-    return occupied_cumsum == 0 | (is_occupied_each_ray & (occupied_cumsum == 1))
+    return occupied_cumsum == 0 # | (is_occupied_each_ray & (occupied_cumsum == 1))
 
 
 def get_visible_mask(
