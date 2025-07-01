@@ -286,11 +286,12 @@ class BTSWrapper(nn.Module):
             )
             __import__('ipdb').set_trace()
 
+        is_valid = (voxel != 255) & in_frustum
         scene_o_acc, scene_ie_acc, scene_ie_rec = compute_occ_scores(
             is_occupied_pred,
             is_occupied,
             data["visible_mask"],
-            (voxel != 255),
+            is_valid,
         )
         data["scene_O_acc"] = scene_o_acc
         data["scene_IE_acc"] = scene_ie_acc
@@ -313,7 +314,7 @@ class BTSWrapper(nn.Module):
             is_occupied_pred,
             is_occupied,
             data["visible_mask"],
-            (voxel != 255) & in_bbox,
+            is_valid & in_bbox,
         )
         data["object_O_acc"] = object_o_acc
         data["object_IE_acc"] = object_ie_acc
