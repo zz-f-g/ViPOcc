@@ -316,7 +316,7 @@ def get_dataflow(config, logger=None):
     mode = config.get("mode", "depth")
 
     train_dataset, test_dataset = make_datasets(config["data"])
-    vis_dataset = copy(test_dataset)
+    # vis_dataset = copy(test_dataset)
 
     # Change eval dataset to only use a single prediction and to return gt depth.
     test_dataset.frame_count = 1 if isinstance(train_dataset, KittiRawDataset) else 2
@@ -326,8 +326,8 @@ def get_dataflow(config, logger=None):
                                                                       KittiRawDataset) else test_dataset.length
 
     # Change visualisation dataset
-    vis_dataset.length = 1
-    vis_dataset._skip = 12 if isinstance(train_dataset, KittiRawDataset) else 50
+    # vis_dataset.length = 1
+    # vis_dataset._skip = 12 if isinstance(train_dataset, KittiRawDataset) else 50
     # vis_dataset.return_depth = True
 
     if idist.get_local_rank() == 0:
@@ -350,15 +350,15 @@ def get_dataflow(config, logger=None):
         shuffle=False,
         collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
     )
-    vis_loader = idist.auto_dataloader(
-        vis_dataset,
-        batch_size=1,
-        num_workers=1,
-        shuffle=False,
-        collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
-    )
+    # vis_loader = idist.auto_dataloader(
+    #     vis_dataset,
+    #     batch_size=1,
+    #     num_workers=1,
+    #     shuffle=False,
+    #     collate_fn=bbox3d_collate_fn if config["data"]["return_3d_bboxes"] else None,
+    # )
 
-    return train_loader, test_loader, vis_loader
+    return train_loader, test_loader, None
 
 
 def get_metrics(config, device, train=False):
