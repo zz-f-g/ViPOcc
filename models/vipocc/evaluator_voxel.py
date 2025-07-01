@@ -320,23 +320,9 @@ class BTSWrapper(nn.Module):
         data["object_IE_acc"] = object_ie_acc
         data["object_IE_rec"] = object_ie_rec
 
-        data["IoU_I"] = (
-            (is_occupied_pred & is_occupied & in_frustum & (voxel != 255))
-            .float()
-            .sum()
-            .item()
-        )
-        data["IoU_U"] = (
-            ((is_occupied_pred | is_occupied) & in_frustum & (voxel != 255))
-            .float()
-            .sum()
-            .item()
-        )
-        data["IoU"] = (
-            is_occupied_pred & is_occupied & in_frustum & (voxel != 255)
-        ).float().sum().item() / (
-            (is_occupied_pred | is_occupied) & in_frustum & (voxel != 255)
-        ).float().sum().item()
+        data["tp"] = (is_occupied_pred & is_occupied & is_valid).float().sum().item()
+        data["fp"] = (is_occupied_pred & (~is_occupied) & is_valid).float().sum().item()
+        data["fn"] = ((~is_occupied_pred) & is_occupied & is_valid).float().sum().item()
         return data
 
 
@@ -368,9 +354,9 @@ def get_metrics(config, device):
         "object_O_acc",
         "object_IE_acc",
         "object_IE_rec",
-        "IoU_I",
-        "IoU_U",
-        "IoU",
+        "tp",
+        "fp",
+        "fn",
     ]
     metrics = {
         name: MeanMetric((lambda n: lambda x: x["output"][n])(name), device)
