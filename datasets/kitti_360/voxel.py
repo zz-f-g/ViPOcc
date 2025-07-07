@@ -8,7 +8,7 @@ from datasets.kitti_360.process_bbox3d import EDGES
 
 EDGE_LINES = [list(edge) for group in EDGES.values() for edge in group]
 
-VOXEL_ORIGIN = np.array([1, -25.6, -2])
+VOXEL_ORIGIN = np.array([1, -25.6, -2.5])
 VOXEL_SIZE = 0.2
 VOXEL_RESOLUTION = (256, 256, 32)
 
