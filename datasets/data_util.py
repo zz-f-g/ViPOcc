@@ -39,7 +39,7 @@ def make_datasets(config):
             test_split_path = None
         else:
             train_split_path = os.path.join(config["split_path"], "train_files.txt")  # 'datasets/kitti_360/splits/seg'
-            test_split_path = os.path.join(config["split_path"], "val_files.txt")
+            test_split_path = os.path.join(config["split_path"], "test_files.txt")
 
         train_dataset = Kitti360Dataset(
             data_path=config["data_path"],
@@ -79,6 +79,7 @@ def make_datasets(config):
             return_3d_bboxes=config.get("return_3d_bboxes", False),
             bboxes_semantic_labels=config.get("bboxes_semantic_labels", []),
             return_segmentation=config.get("data_segmentation", False),
+            return_voxel=config.get("return_voxel", False),
             keyframe_offset=config.get("keyframe_offset", 0),
             fisheye_rotation=config.get("fisheye_rotation", 0),
             fisheye_offset=config.get("fisheye_offset", 1),

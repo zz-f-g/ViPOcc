@@ -57,9 +57,25 @@ def base_training(local_rank, config, get_dataflow, initialize, get_metrics, vis
     logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
 
     # Let's now setup evaluator engine to perform model's validation and compute metrics
-    metrics = get_metrics(config, device)
-    metrics_loss = {k: MeanMetric((lambda y: lambda x: x["loss_dict"][y])(k)) for k in
-                    criterion.get_loss_metric_names()}
+    metrics = get_metrics(
+        config,
+        device,
+        occ=(
+            config["save_best"]["metric"]
+            in [
+                "scene_O_acc",
+                "scene_IE_acc",
+                "scene_IE_rec",
+                "object_O_acc",
+                "object_IE_acc",
+                "object_IE_rec",
+            ]
+        ),
+    )
+    metrics_loss = {
+        k: MeanMetric((lambda y: lambda x: x["loss_dict"][y])(k))
+        for k in criterion.get_loss_metric_names()
+    }
 
     loss_during_validation = config.get("loss_during_validation", True)
     if loss_during_validation:

@@ -17,8 +17,8 @@ checkpoint_every: 500
 points_on_ray: 64
 
 save_best:
-  metric: abs_rel
-  sign: -1
+  metric: scene_O_acc
+  sign: 1
   n_saved: 15
 
 data:
@@ -29,9 +29,10 @@ data:
   fisheye_rotation: [ 0, -15 ]
   return_gt_depth: true
   return_pseudo_depth: true
-  return_3d_bboxes: true
   return_all_pseudo_depth: true
+  return_3d_bboxes: false
   bboxes_semantic_labels: ["car",]
+  return_voxel: true
 
 model_conf:
   arch: "BTSNet"
@@ -62,8 +63,12 @@ model_conf:
 
   z_near: 3
   z_far: 80
+  x_range: [ -4.5, 4.5 ]
+  y_range: ~ # [ -1.5, 2.5 ]
+  z_range: [ 3, 20 ]
   # only eval gt depth in distance range [z_near, z_far]
   eval_w_dist_range: true
+  eval_occ: true
   inv_z: true
 
   n_frames_encoder: 1

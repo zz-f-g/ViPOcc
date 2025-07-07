@@ -10,6 +10,7 @@ from torch.nn import functional as F
 
 from datasets.data_util import make_datasets
 from datasets.kitti_raw.kitti_raw_dataset import KittiRawDataset
+from datasets.kitti_360.voxel import VOXEL_RESOLUTION, VOXEL_ORIGIN, VOXEL_SIZE
 from models.common.backbones import Monodepth2
 from models.common.backbones.res_depth import ResidualDepth
 from models.common.backbones.res_inv_depth import RID
@@ -24,6 +25,26 @@ from utils.metrics import MeanMetric
 from utils.modules import DepthRefinement
 from utils.projection_operations import distance_to_z
 from utils.bbox import Bbox, bbox3d_collate_fn
+from utils.infer_sampler import make_infer_sampler
+from models.vipocc.evaluator_voxel import (
+    infer_sigma,
+    compute_occ_scores,
+    process_unlabeled_voxel_under_ground,
+    is_in_range,
+)
+
+
+# The KITTI 360 cameras have a 5 degrees negative inclination. We need to account for that.
+# (c0_T_c0') c0' is ideal view with yz plane parallel to ground
+cam_incl_adjust = torch.tensor(
+    [
+        [1.0000000, 0.0000000, 0.0000000, 0],
+        [0.0000000, 0.9961947, 0.0871557, 0],
+        [0.0000000, -0.0871557, 0.9961947, 0],
+        [0.0000000, 000000000, 0.0000000, 1],
+    ],
+    dtype=torch.float32,
+)
 
 
 class BTSWrapper(nn.Module):
@@ -35,6 +56,11 @@ class BTSWrapper(nn.Module):
         self.z_near = config["z_near"]  # 3
         self.z_far = config["z_far"]  # 80
         self.eval_w_dist_range = config["eval_w_dist_range"]
+        self.eval_occ = config["eval_occ"]
+        self.query_batch_size = 50000
+        self.x_range = config.get("x_range", None)
+        self.y_range = config.get("y_range", None)
+        self.z_range = config.get("z_range", None)
         self.ray_batch_size = config["ray_batch_size"]  # 4096
         frames_render = config.get("n_frames_render", 2)  # 2
         self.frame_sample_mode = config.get("frame_sample_mode", "default")
@@ -83,6 +109,32 @@ class BTSWrapper(nn.Module):
                 self.depth_model = Monodepth2(resnet_layers=18, d_out=1)
             else:
                 self.res_inv_depth = RID(resnet_layers=18)
+
+        X, Y, Z = VOXEL_RESOLUTION
+        vox_coords = torch.stack(
+            torch.meshgrid(
+                torch.arange(X), torch.arange(Y), torch.arange(Z), indexing="ij"
+            ),
+            dim=0,
+        ).view(3, -1)
+        points_velo = (
+            (vox_coords + 0.5) * VOXEL_SIZE
+            + torch.tensor(VOXEL_ORIGIN).view(3, 1)
+        ).to(torch.float32)
+        self.points_velo_h = torch.cat(
+            [points_velo, torch.ones_like(points_velo[:1, ...])]
+        ).to(
+            "cuda"
+        )  # [4, XYZ]
+        sampler_fns = make_infer_sampler(
+            tuple(config["image_size"]),
+            config["points_on_ray"],
+            (self.z_near, self.z_far),
+            "bilinear",
+            torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+        )
+        self.make_points = sampler_fns[0]
+        self.infer_sampler = sampler_fns[1]
 
     @staticmethod
     def get_loss_metric_names():
@@ -196,16 +248,62 @@ class BTSWrapper(nn.Module):
 
         # ================================ validation during training ================================
         if not self.training:
-            if self.use_depth_branch:
-                data["predicted_depth"] = self.predict_depth(images[:, 0], data["pseudo_depth"][0])
+            if self.eval_occ:
+                xyz_voxel = (
+                    (cam_incl_adjust.to("cuda") @ data["voxellidar2c"] @ self.points_velo_h[None, ...].expand(n, -1, -1))[:, :3, :]
+                    .permute(0, 2, 1)
+                    .reshape(n, *VOXEL_RESOLUTION, 3)
+                )
+                in_range = (
+                    is_in_range(xyz_voxel[..., 0], self.x_range)
+                    & is_in_range(xyz_voxel[..., 1], self.y_range)
+                    & is_in_range(xyz_voxel[..., 2], self.z_range)
+                )
+                xyz_infer, z_samp = self.make_points(projs[:, 0])
+                self.renderer.net.grid_f_poses_w2c = (
+                    torch.inverse(cam_incl_adjust.to(images.device))
+                    @ self.renderer.net.grid_f_poses_w2c
+                )
+                densities = infer_sigma(
+                    self.renderer.net,
+                    xyz_infer.view(n, -1, 3),
+                    self.query_batch_size,
+                    bboxes_3d,
+                )
+                deltas = z_samp[:, 1:] - z_samp[:, :-1]  # (1, K-1)
+                delta_inf = 1e10 * torch.ones_like(deltas[:, :1])
+                deltas = torch.cat([deltas, delta_inf], -1)  # (1, K)
+                alpha = 1 - torch.exp(
+                    -deltas.abs() * torch.relu(densities.view(-1, xyz_infer.shape[-2])) # [-1, K]
+                ).view(*xyz_infer.shape[:-1])
+                is_occupied_pred = self.infer_sampler(alpha, xyz_voxel, projs[:, 0]) > 0.5
+
+                voxel = torch.stack(
+                    [process_unlabeled_voxel_under_ground(v) for v in data["voxel"]],
+                    dim=0,
+                )
+                is_occupied = (voxel != 0) & (voxel != 255)
+                is_valid = (voxel != 255) & in_range
+                scene_o_acc, scene_ie_acc, scene_ie_rec = compute_occ_scores(
+                    is_occupied_pred,
+                    is_occupied,
+                    data["visible_mask"],
+                    is_valid,
+                )
+                data["scene_O_acc"] = scene_o_acc
+                data["scene_IE_acc"] = scene_ie_acc
+                data["scene_IE_rec"] = scene_ie_rec
             else:
-                sampler = self.val_sampler
-                all_rays, _ = sampler.sample(images_ip[:, :1], poses[:, :1], projs[:, :1])
-                rendered_depth = self.renderer(all_rays, None, depth_only=True).reshape(n, -1, h, w)  # [1,1,192,640]
-                rendered_depth = distance_to_z(rendered_depth, projs[:, :1])
-                data["predicted_depth"] = rendered_depth
-            if len(data["depths"]) > 0:
-                data.update(self.compute_depth_metrics(data))
+                if self.use_depth_branch:
+                    data["predicted_depth"] = self.predict_depth(images[:, 0], data["pseudo_depth"][0])
+                else:
+                    sampler = self.val_sampler
+                    all_rays, _ = sampler.sample(images_ip[:, :1], poses[:, :1], projs[:, :1])
+                    rendered_depth = self.renderer(all_rays, None, depth_only=True).reshape(n, -1, h, w)  # [1,1,192,640]
+                    rendered_depth = distance_to_z(rendered_depth, projs[:, :1])
+                    data["predicted_depth"] = rendered_depth
+                if len(data["depths"]) > 0:
+                    data.update(self.compute_depth_metrics(data))
             return data
 
         sampler = self.train_sampler  # if self.training else self.val_sampler
@@ -361,7 +459,7 @@ def get_dataflow(config, logger=None):
     return train_loader, test_loader, None
 
 
-def get_metrics(config, device, train=False):
+def get_metrics(config, device, train=False, occ=False):
     if train:
         # names = ['loss', 'loss_rgb_fine', 'loss_depth_recon', 'loss_temp_align']
         # metrics = {name: RunningAverage(output_transform=lambda x: x["loss_dict"][name]) for name in names}
@@ -369,7 +467,17 @@ def get_metrics(config, device, train=False):
         names = ['loss']
         metrics = {name: RunningAverage(output_transform=lambda x: x["loss_dict"][name]) for name in names}
         return metrics
-    names = ["abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"]
+    if occ:
+        names = [
+            "scene_O_acc",
+            "scene_IE_acc",
+            "scene_IE_rec",
+            # "object_O_acc",
+            # "object_IE_acc",
+            # "object_IE_rec",
+        ]
+    else:
+        names = ["abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"]
     metrics = {name: MeanMetric((lambda n: lambda x: x["output"][n])(name), device) for name in names}
     return metrics
 
