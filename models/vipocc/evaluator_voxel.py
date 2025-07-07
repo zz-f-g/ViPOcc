@@ -41,6 +41,13 @@ cam_incl_adjust = torch.tensor(
 )
 
 
+def is_in_range(x: Tensor, ra: tuple[float, float] | None):
+    if ra is not None:
+        return (x >= ra[0]) & (x <= ra[1])
+    else:
+        return torch.ones_like(x, dtype=torch.bool, device=x.device)
+
+
 def process_unlabeled_voxel_under_ground(
     voxel: Tensor,
     unlabeled: int = 0,
@@ -139,6 +146,9 @@ class BTSWrapper(nn.Module):
         self.z_far = config["z_far"]
         self.query_batch_size = config.get("query_batch_size", 50000)
         self.occ_threshold = 0.5
+        self.x_range = config.get("x_range", None)
+        self.y_range = config.get("y_range", None)
+        self.z_range = config.get("z_range", None)
 
         X, Y, Z = VOXEL_RESOLUTION
         vox_coords = torch.stack(
@@ -237,9 +247,12 @@ class BTSWrapper(nn.Module):
             .permute(0, 2, 1)
             .reshape(n, *VOXEL_RESOLUTION, 3)
         )
-        q_pts_projected = xyz_voxel.view(n, -1, 3) @ projs[
-            :, 0, :, :
-        ].permute(0, 2, 1)
+        in_range = (
+            is_in_range(xyz_voxel[..., 0], self.x_range)
+            & is_in_range(xyz_voxel[..., 1], self.y_range)
+            & is_in_range(xyz_voxel[..., 2], self.z_range)
+        )
+        q_pts_projected = xyz_voxel.view(n, -1, 3) @ projs[:, 0, :, :].permute(0, 2, 1)
         q_pts_uv = q_pts_projected[..., :2] / q_pts_projected[..., 2:]
         in_frustum = (
             (q_pts_uv > torch.tensor([-1, -1], device=q_pts_uv.device)).all(-1)
