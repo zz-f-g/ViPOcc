@@ -57,6 +57,9 @@ model_conf:
 
   z_near: 3
   z_far: 80
+  x_range: [ -4.5, 4.5 ]
+  y_range: ~ # [ -1.5, 2.5 ]
+  z_range: [ 3, 20 ]
 
   ray_batch_size: 256
   code_mode: z
