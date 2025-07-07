@@ -28,6 +28,19 @@ from utils.infer_sampler import make_infer_sampler
 EPS = 1e-4
 
 
+# The KITTI 360 cameras have a 5 degrees negative inclination. We need to account for that.
+# (c0_T_c0') c0' is ideal view with yz plane parallel to ground
+cam_incl_adjust = torch.tensor(
+    [
+        [1.0000000, 0.0000000, 0.0000000, 0],
+        [0.0000000, 0.9961947, 0.0871557, 0],
+        [0.0000000, -0.0871557, 0.9961947, 0],
+        [0.0000000, 000000000, 0.0000000, 1],
+    ],
+    dtype=torch.float32,
+)
+
+
 def process_unlabeled_voxel_under_ground(
     voxel: Tensor,
     unlabeled: int = 0,
@@ -196,9 +209,9 @@ class BTSWrapper(nn.Module):
         self.count += 1
 
         world_transform = torch.inverse(poses[:, :1, :, :])  # transform to camera0
-        # world_transform = cam_incl_adjust.to(images.device) @ world_transform  # add inclination
+        world_transform = cam_incl_adjust.to(images.device) @ world_transform  # add inclination
         # NOTE: already add incl in voxel.py
-        poses = world_transform @ poses
+        poses = world_transform @ poses  # cam_incl_adjust
 
         n, v, c, h, w = images.shape
         self.sampler.height = h
@@ -220,7 +233,7 @@ class BTSWrapper(nn.Module):
         )
 
         xyz_voxel = (
-            (data["voxellidar2c"] @ self.points_velo_h[None, ...].expand(n, -1, -1))[:, :3, :]
+            (cam_incl_adjust.to("cuda") @ data["voxellidar2c"] @ self.points_velo_h[None, ...].expand(n, -1, -1))[:, :3, :]
             .permute(0, 2, 1)
             .reshape(n, *VOXEL_RESOLUTION, 3)
         )
