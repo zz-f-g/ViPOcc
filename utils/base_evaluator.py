@@ -12,6 +12,7 @@ from ignite.utils import manual_seed, setup_logger
 from torch.cuda.amp import autocast
 
 from utils.array_operations import to
+from utils.save_metrics import save_metrics_to_csv
 
 
 def base_evaluation(local_rank, config, get_dataflow, initialize, get_metrics):
@@ -83,6 +84,7 @@ def base_evaluation(local_rank, config, get_dataflow, initialize, get_metrics):
             )
         log_metrics(logger, state.times["COMPLETED"], "Test", state.metrics)
         logger.info(f"Checkpoint: {str(cp_path)}")
+        save_metrics_to_csv(state.metrics, Path(config["metric_save_path"]), config["name"], str(cp_path))
     except Exception as e:
         logger.exception("")
         raise e
