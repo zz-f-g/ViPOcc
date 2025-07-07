@@ -256,19 +256,26 @@ class BTSWrapper(nn.Module):
             dim=0,
         )
         is_occupied = (voxel != 0) & (voxel != 255)
+        is_valid = (voxel != 255) & in_frustum & in_range
         # for visualization
         if False:
-            iop = is_occupied_pred.clone()
-            iop[..., 16:] = 0
-            self.visualizer.render(
-                iop[0].cpu().numpy(),
-                velo2cam=data["voxellidar2c"][0].cpu().numpy(),
-                bbox_vertices_in_cam=(
-                    data["3d_bboxes"][0]["vertices"].cpu().numpy()
-                    if "3d_bboxes" in data
-                    else None
-                ),
-            )
+            tp = is_occupied_pred & is_occupied & is_valid
+            fp = is_occupied_pred & (~is_occupied) & is_valid
+            fn = (~is_occupied_pred) & is_occupied & is_valid
+            tpo = is_occupied_pred & is_occupied & is_valid & data["visible_mask"]
+            fpo = is_occupied_pred & (~is_occupied) & is_valid & data["visible_mask"]
+            fno = (~is_occupied_pred) & is_occupied & is_valid & data["visible_mask"]
+            # iop = is_occupied_pred.clone()
+            # iop[..., 16:] = 0
+            # self.visualizer.render(
+            #     iop[0].cpu().numpy(),
+            #     velo2cam=data["voxellidar2c"][0].cpu().numpy(),
+            #     bbox_vertices_in_cam=(
+            #         data["3d_bboxes"][0]["vertices"].cpu().numpy()
+            #         if "3d_bboxes" in data
+            #         else None
+            #     ),
+            # )
             self.visualizer.render(
                 voxel[0].cpu().numpy(),
                 velo2cam=data["voxellidar2c"][0].cpu().numpy(),
@@ -280,7 +287,6 @@ class BTSWrapper(nn.Module):
             )
             __import__('ipdb').set_trace()
 
-        is_valid = (voxel != 255) & in_frustum
         scene_o_acc, scene_ie_acc, scene_ie_rec = compute_occ_scores(
             is_occupied_pred,
             is_occupied,
