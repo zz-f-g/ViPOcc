@@ -9,7 +9,7 @@ defaults:
 name: "eval_voxel"
 eval_type: "eval_voxel"
 checkpoint: "checkpoints/ViPOcc-KITTI-360.pt"
-
+metric_save_path: out/metrics.csv
 
 log_every: 100
 batch_size: 1
