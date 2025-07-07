@@ -17,7 +17,7 @@ data:
   return_gt_depth: true
   return_pseudo_depth: true
   is_preprocessed: true
-  return_3d_bboxes: true
+  return_3d_bboxes: false
   bboxes_semantic_labels: ["car",]
 
 
@@ -47,7 +47,7 @@ model_conf:
 
   z_near: 3
   z_far: 80
-  eval_w_dist_range: true
+  eval_w_dist_range: false
   ray_batch_size: 256
   code_mode: z
   inv_z: true
