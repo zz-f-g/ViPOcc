@@ -68,6 +68,7 @@ model_conf:
 
   sample_color: true
   use_legacy_benchmark: false
+  bbox_margin_ratio: 1.5
 
 renderer:
   n_coarse: ${points_on_ray}

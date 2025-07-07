@@ -108,15 +108,13 @@ def compute_occ_scores(
     is_valid: Tensor,
 ):
     return (
-        (is_occupied_pred == is_occupied)[is_valid].float().mean().item(),
+        (is_occupied_pred == is_occupied)[is_valid].float().mean(),
         (is_occupied_pred == is_occupied)[(~is_visible) & is_valid]
         .float()
-        .mean()
-        .item(),
+        .mean(),
         (~is_occupied_pred)[(~is_occupied) & (~is_visible) & is_valid]
         .float()
-        .mean()
-        .item(),
+        .mean(),
     )
 
 
