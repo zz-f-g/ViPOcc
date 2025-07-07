@@ -85,6 +85,7 @@ class Kitti360Dataset(Dataset):
         data_path: str,
         pose_path: str,
         split_path: Optional[str],
+        ssc_root_path: str | None = None,
         target_image_size=(192, 640),
         return_stereo=False,
         return_fisheye=True,
@@ -174,7 +175,10 @@ class Kitti360Dataset(Dataset):
             self._datapoints = [dp for dp in self._datapoints if not dp[2]]
 
         if self.return_voxel:
-            self.ssc_root_path = Path(self.data_path) / ".." / "sscbench-kitti360"
+            if ssc_root_path is None:
+                self.ssc_root_path = Path(self.data_path) / ".." / "sscbench-kitti360"
+            else:
+                self.ssc_root_path = ssc_root_path
             assert self.ssc_root_path.exists()
             self.img_ids_voxel, self.img_ids_test, self.imgid2sscid, self.sscid2imgid = load_sscbench(
                 self.ssc_root_path / "kitti_360_match.txt",
