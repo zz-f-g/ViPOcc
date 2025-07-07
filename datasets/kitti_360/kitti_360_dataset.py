@@ -178,7 +178,7 @@ class Kitti360Dataset(Dataset):
             if ssc_root_path is None:
                 self.ssc_root_path = Path(self.data_path) / ".." / "sscbench-kitti360"
             else:
-                self.ssc_root_path = ssc_root_path
+                self.ssc_root_path = Path(ssc_root_path)
             assert self.ssc_root_path.exists()
             self.img_ids_voxel, self.img_ids_test, self.imgid2sscid, self.sscid2imgid = load_sscbench(
                 self.ssc_root_path / "kitti_360_match.txt",
