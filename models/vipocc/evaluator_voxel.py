@@ -166,14 +166,8 @@ class BTSWrapper(nn.Module):
             VOXEL_SIZE,
             calib["K_perspective"],
             calib["T_velo_to_cam"]["00"],
-            np.array(
-                [
-                    [1.0000000, 0.0000000, 0.0000000, 0],
-                    [0.0000000, 0.9961947, -0.0871557, 0],
-                    [0.0000000, 0.0871557, 0.9961947, 0],
-                    [0.0000000, 000000000, 0.0000000, 1],
-                ],
-            ),
+            # cam_incl_adjust,
+            np.eye(4),
         )
 
     def forward(self, data):
